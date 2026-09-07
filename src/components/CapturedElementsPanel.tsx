@@ -109,7 +109,17 @@ export default function CapturedElementsPanel({ api }: CapturedElementsPanelProp
 
   const deleteSelected = () => {
     if (selectedIds.size === 0) return;
+    const confirmed = window.confirm(
+      `Delete ${selectedIds.size} captured element${selectedIds.size === 1 ? "" : "s"}? This can't be undone.`,
+    );
+    if (!confirmed) return;
     api.deleteElements(selectedIds);
+  };
+
+  const deleteOne = (el: CapturedElement) => {
+    const confirmed = window.confirm(`Delete "${el.name}"? This can't be undone.`);
+    if (!confirmed) return;
+    api.deleteElements(new Set([el.id]));
   };
 
   return (
@@ -275,7 +285,7 @@ export default function CapturedElementsPanel({ api }: CapturedElementsPanelProp
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    api.deleteElements(new Set([el.id]));
+                    deleteOne(el);
                   }}
                   className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-rose-100 dark:hover:bg-rose-950 text-rose-400"
                   title="Delete"

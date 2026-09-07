@@ -98,8 +98,9 @@ export default function App() {
       } else if (e.key === "Escape") {
         if (modal) setModal(null);
         else webviewApi?.setCaptureModeEnabled(false);
-      } else if (e.key === "Delete" && !inTextField && api.selectedElementId) {
-        api.deleteElements(new Set([api.selectedElementId]));
+      } else if (e.key === "Delete" && !inTextField && api.selectedElementId && api.selectedElement) {
+        const confirmed = window.confirm(`Delete "${api.selectedElement.name}"? This can't be undone.`);
+        if (confirmed) api.deleteElements(new Set([api.selectedElementId]));
       }
     };
     window.addEventListener("keydown", onKeyDown);
