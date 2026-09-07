@@ -63,8 +63,10 @@ test.describe("captured elements — select all", () => {
     await selectAll.uncheck();
     await expect(window.getByText(/Delete \d/)).not.toBeVisible();
 
-    // Re-check via select-all, then delete everything through the bulk action.
+    // Re-check via select-all, then delete everything through the bulk action — confirmed via
+    // the native dialog (see CapturedElementsPanel.tsx's deleteSelected).
     await selectAll.check();
+    window.once("dialog", (dialog) => void dialog.accept());
     await window.getByText("Delete 3").click();
     await expect(window.getByText("Captured Elements (0)")).toBeVisible();
     await expect(window.getByText("Ctrl+Click an element in the browser to capture it.")).toBeVisible();
