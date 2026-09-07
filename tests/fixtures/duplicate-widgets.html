@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Fixture: Duplicate Widgets</title>
+  </head>
+  <body>
+    <!-- Neither class nor data-row alone is unique, but the combination is — exercises the
+         "combine two non-unique attributes" path of the custom locator builder. -->
+    <button class="action-btn" data-row="1">Save</button>
+    <button class="action-btn" data-row="2">Save</button>
+    <button class="other-btn" data-row="1">Save</button>
+
+    <!-- Fully identical pair — no attribute combination can disambiguate them, exercising the
+         "wrap with position" last-resort path. -->
+    <input class="dup-input" name="dup" />
+    <input class="dup-input" name="dup" />
+  </body>
+</html>

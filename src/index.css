@@ -1,0 +1,109 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+/* Dark mode is toggled manually via a `.dark` class on <html> (see App.tsx), not via the OS
+   `prefers-color-scheme` media query, so it must be opted into explicitly. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Intermediate shade numbers Tailwind's default palette doesn't generate, defined as
+     interpolations between the nearest standard steps so every className using them renders. */
+  --color-blue-105: color-mix(in oklch, var(--color-blue-100) 95%, var(--color-blue-200) 5%);
+  --color-blue-150: color-mix(in oklch, var(--color-blue-100) 50%, var(--color-blue-200) 50%);
+  --color-blue-450: color-mix(in oklch, var(--color-blue-400) 50%, var(--color-blue-500) 50%);
+  --color-blue-550: color-mix(in oklch, var(--color-blue-500) 50%, var(--color-blue-600) 50%);
+  --color-blue-650: color-mix(in oklch, var(--color-blue-600) 50%, var(--color-blue-700) 50%);
+  --color-emerald-150: color-mix(in oklch, var(--color-emerald-100) 50%, var(--color-emerald-200) 50%);
+  --color-emerald-650: color-mix(in oklch, var(--color-emerald-600) 50%, var(--color-emerald-700) 50%);
+  --color-gray-150: color-mix(in oklch, var(--color-gray-100) 50%, var(--color-gray-200) 50%);
+  --color-gray-450: color-mix(in oklch, var(--color-gray-400) 50%, var(--color-gray-500) 50%);
+  --color-gray-650: color-mix(in oklch, var(--color-gray-600) 50%, var(--color-gray-700) 50%);
+  --color-slate-150: color-mix(in oklch, var(--color-slate-100) 50%, var(--color-slate-200) 50%);
+  --color-slate-250: color-mix(in oklch, var(--color-slate-200) 50%, var(--color-slate-300) 50%);
+  --color-slate-350: color-mix(in oklch, var(--color-slate-300) 50%, var(--color-slate-400) 50%);
+  --color-slate-450: color-mix(in oklch, var(--color-slate-400) 50%, var(--color-slate-500) 50%);
+  --color-slate-550: color-mix(in oklch, var(--color-slate-500) 50%, var(--color-slate-600) 50%);
+  --color-slate-650: color-mix(in oklch, var(--color-slate-600) 50%, var(--color-slate-700) 50%);
+  --color-slate-750: color-mix(in oklch, var(--color-slate-700) 50%, var(--color-slate-800) 50%);
+  --color-slate-850: color-mix(in oklch, var(--color-slate-800) 50%, var(--color-slate-900) 50%);
+  --color-slate-905: color-mix(in oklch, var(--color-slate-900) 90%, var(--color-slate-950) 10%);
+  --color-rose-150: color-mix(in oklch, var(--color-rose-100) 50%, var(--color-rose-200) 50%);
+  --color-amber-150: color-mix(in oklch, var(--color-amber-100) 50%, var(--color-amber-200) 50%);
+}
+
+/* --- Accent Themes ---
+   Primary/brand accents (buttons, active states, links, focus rings) all use the `blue-*`
+   scale, expressed relative to a single `--accent-hue` — switching themes changes one value and
+   the whole scale (and everything built on it) follows, without touching component markup. */
+@theme {
+  --accent-hue: 217; /* "Ocean" */
+}
+
+:root {
+  --color-blue-50: oklch(97% 0.014 var(--accent-hue));
+  --color-blue-100: oklch(93.2% 0.032 var(--accent-hue));
+  --color-blue-200: oklch(88.2% 0.059 var(--accent-hue));
+  --color-blue-300: oklch(80.9% 0.105 var(--accent-hue));
+  --color-blue-400: oklch(70.7% 0.165 var(--accent-hue));
+  --color-blue-500: oklch(62.3% 0.214 var(--accent-hue));
+  --color-blue-600: oklch(54.6% 0.245 var(--accent-hue));
+  --color-blue-700: oklch(48.8% 0.243 var(--accent-hue));
+  --color-blue-800: oklch(42.4% 0.199 var(--accent-hue));
+  --color-blue-900: oklch(37.9% 0.146 var(--accent-hue));
+  --color-blue-950: oklch(28.2% 0.091 var(--accent-hue));
+}
+
+:root[data-theme="teal"] { --accent-hue: 195; }
+:root[data-theme="violet"] { --accent-hue: 300; }
+:root[data-theme="berry"] { --accent-hue: 330; }
+
+/* Custom thin scrollbar across the panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-slate-700);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-slate-500);
+}
+
+/* Capture-mode pulse on the header's status pill */
+@keyframes indicator-glow {
+  0%, 100% {
+    box-shadow: 0 0 4px rgba(59, 130, 246, 0.4), 0 0 12px rgba(59, 130, 246, 0.2);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.8), 0 0 24px rgba(59, 130, 246, 0.4);
+    transform: scale(1.1);
+  }
+}
+
+.glowing-indicator {
+  animation: indicator-glow 2s infinite ease-in-out;
+}
+
+.card-charm {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.card-charm:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -8px rgb(0 0 0 / 0.12);
+}
+
+.dark .card-charm:hover {
+  box-shadow: 0 12px 24px -8px rgb(0 0 0 / 0.4);
+}
