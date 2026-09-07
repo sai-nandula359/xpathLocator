@@ -17,4 +17,14 @@ describe("identifier casing", () => {
     expect(toCamelCase("###")).toBe("element");
     expect(toUpperSnakeCase("")).toBe("ELEMENT");
   });
+
+  // Regression: an already-camelCase/PascalCase input (e.g. a user-typed Page Object class name)
+  // used to collapse into one word and get re-cased wrong ("LoginPage" -> "Loginpage") since word
+  // boundaries were only ever detected from spaces/punctuation, never from a case change.
+  it("preserves word boundaries in an already-cased input instead of collapsing them", () => {
+    expect(toPascalCase("LoginPage")).toBe("LoginPage");
+    expect(toCamelCase("LoginPage")).toBe("loginPage");
+    expect(toSnakeCase("LoginPage")).toBe("login_page");
+    expect(toPascalCase("userProfileCard")).toBe("UserProfileCard");
+  });
 });

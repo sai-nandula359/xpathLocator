@@ -4,7 +4,7 @@
 // page.getByPlaceholder('Username')
 // page.locator("input[name='username']")
 
-import { playwrightBlock, playwrightDeclaration } from "@/engine/codegen/playwrightJsLike";
+import { playwrightBlock, playwrightDeclaration, playwrightPageObjectJs } from "@/engine/codegen/playwrightJsLike";
 import type { CodeGenerator } from "@/engine/codegen/types";
 
 export const playwrightJsGenerator: CodeGenerator = {
@@ -13,4 +13,5 @@ export const playwrightJsGenerator: CodeGenerator = {
   fileExtension: "js",
   generateDeclaration: playwrightDeclaration,
   generateBlock: playwrightBlock,
+  generatePageObject: playwrightPageObjectJs,
 };

@@ -29,6 +29,20 @@ function declaration(element: CapturedElement): string {
   return `\${${varName}}    ${locator}`;
 }
 
+// Robot Framework has no class construct of its own — its equivalent of a Page Object is a
+// resource file: a *** Variables *** table of locators (exactly what generateBlock already
+// produces) under a documented *** Settings *** header naming the page, importable into any
+// .robot test suite via `Resource    LoginPage.resource`.
+function pageObject(className: string, elements: CapturedElement[]): string {
+  return [
+    "*** Settings ***",
+    `Documentation    Page Object: ${className}`,
+    "",
+    "*** Variables ***",
+    ...elements.map(declaration),
+  ].join("\n");
+}
+
 export const robotFrameworkGenerator: CodeGenerator = {
   id: "robot-framework",
   label: "Robot Framework",
@@ -38,4 +52,5 @@ export const robotFrameworkGenerator: CodeGenerator = {
     const lines = ["*** Variables ***", ...elements.map(declaration)];
     return lines.join("\n");
   },
+  generatePageObject: pageObject,
 };

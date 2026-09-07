@@ -3,7 +3,7 @@
 // login_button = (By.XPATH, "//button[@id='loginButton']")
 
 import { escapeDoubleQuoted } from "@/engine/codegen/escape";
-import { toSnakeCase } from "@/engine/codegen/identifier";
+import { toPascalCase, toSnakeCase } from "@/engine/codegen/identifier";
 import { pickSeleniumStrategy, type SeleniumStrategyKind } from "@/engine/codegen/seleniumStrategy";
 import type { CodeGenerator } from "@/engine/codegen/types";
 import type { CapturedElement } from "@/types";
@@ -17,9 +17,21 @@ const CONSTANT: Record<SeleniumStrategyKind, string> = {
   xpath: "XPATH",
 };
 
-function declaration(element: CapturedElement): string {
+function byTuple(element: CapturedElement): string {
   const { kind, value } = pickSeleniumStrategy(element);
-  return `${toSnakeCase(element.name)} = (By.${CONSTANT[kind]}, "${escapeDoubleQuoted(value)}")`;
+  return `(By.${CONSTANT[kind]}, "${escapeDoubleQuoted(value)}")`;
+}
+
+function declaration(element: CapturedElement): string {
+  return `${toSnakeCase(element.name)} = ${byTuple(element)}`;
+}
+
+function pageObject(className: string, elements: CapturedElement[]): string {
+  const name = toPascalCase(className);
+  const fields = elements.map((el) => `        self.${toSnakeCase(el.name)} = ${byTuple(el)}`);
+  return [`class ${name}:`, `    def __init__(self, driver):`, `        self.driver = driver`, ...fields].join(
+    "\n",
+  );
 }
 
 export const seleniumPythonGenerator: CodeGenerator = {
@@ -28,4 +40,5 @@ export const seleniumPythonGenerator: CodeGenerator = {
   fileExtension: "py",
   generateDeclaration: declaration,
   generateBlock: (elements) => elements.map(declaration).join("\n"),
+  generatePageObject: pageObject,
 };

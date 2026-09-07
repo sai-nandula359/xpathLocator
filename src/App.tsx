@@ -8,11 +8,12 @@ import ExportDialog from "@/components/ExportDialog";
 import Header from "@/components/Header";
 import LocatorDetailsPanel from "@/components/LocatorDetailsPanel";
 import NewSessionModal from "@/components/NewSessionModal";
+import PageObjectDialog from "@/components/PageObjectDialog";
 import { useCaptureSession } from "@/hooks/useCaptureSession";
 import type { WebviewCaptureApi } from "@/hooks/useWebviewCapture";
 import { loadSession } from "@/session/sessionStore";
 
-type ModalKind = "new-session" | "export" | null;
+type ModalKind = "new-session" | "export" | "page-object" | null;
 
 const DARK_MODE_KEY = "slcs-dark-mode";
 
@@ -133,6 +134,7 @@ export default function App() {
         onNewSession={() => setModal("new-session")}
         onOpenSession={(id) => void openSession(id)}
         onOpenExport={() => setModal("export")}
+        onOpenPageObject={() => setModal("page-object")}
       />
 
       <main className="flex-1 min-h-0 p-3">
@@ -155,6 +157,7 @@ export default function App() {
         <NewSessionModal onCreate={(name, url) => startNewSession(name, url)} onClose={() => setModal(null)} />
       )}
       {modal === "export" && <ExportDialog api={api} onClose={() => setModal(null)} />}
+      {modal === "page-object" && <PageObjectDialog api={api} onClose={() => setModal(null)} />}
 
       {webviewApi?.duplicatePrompt && (
         <DuplicatePromptModal outcome={webviewApi.duplicatePrompt} onResolve={webviewApi.resolveDuplicate} />

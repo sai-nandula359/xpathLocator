@@ -1,4 +1,4 @@
-import { Crosshair, Download, Moon, Save, Sun, Target } from "lucide-react";
+import { Code2, Crosshair, Download, Moon, Save, Sun, Target } from "lucide-react";
 import type { CaptureSessionApi } from "@/hooks/useCaptureSession";
 import type { WebviewCaptureApi } from "@/hooks/useWebviewCapture";
 import SessionDropdown from "@/components/SessionDropdown";
@@ -11,6 +11,7 @@ interface HeaderProps {
   onNewSession: () => void;
   onOpenSession: (id: string) => void;
   onOpenExport: () => void;
+  onOpenPageObject: () => void;
 }
 
 export default function Header({
@@ -21,6 +22,7 @@ export default function Header({
   onNewSession,
   onOpenSession,
   onOpenExport,
+  onOpenPageObject,
 }: HeaderProps) {
   return (
     <header className="sticky top-0 z-30 border-b backdrop-blur-md bg-white/90 dark:bg-slate-950/80 border-slate-150 dark:border-slate-850 transition-colors duration-200">
@@ -61,6 +63,13 @@ export default function Header({
               title="Export (Ctrl+E)"
             >
               <Download className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onOpenPageObject}
+              className="p-2 border border-gray-150 dark:border-slate-850 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-gray-500 dark:text-gray-400"
+              title="Generate Page Object"
+            >
+              <Code2 className="w-4 h-4" />
             </button>
 
             <div

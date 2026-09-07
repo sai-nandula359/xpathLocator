@@ -19,6 +19,16 @@ describe("codegen registry", () => {
     }
   });
 
+  it("every framework can also generate a Page Object containing the element's name", () => {
+    const el = loginButtonElement();
+    for (const framework of FRAMEWORKS) {
+      const generator = getCodeGenerator(framework.id)!;
+      const pageObject = generator.generatePageObject("LoginPage", [el]);
+      expect(pageObject.length, `empty Page Object for ${framework.id}`).toBeGreaterThan(0);
+      expect(pageObject, `${framework.id} Page Object missing "LoginPage"`).toContain("LoginPage");
+    }
+  });
+
   it("returns null for an unknown id", () => {
     expect(getCodeGenerator("not-a-real-framework")).toBeNull();
   });

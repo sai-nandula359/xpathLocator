@@ -7,6 +7,7 @@
 // flagging the plugin dependency rather than presented as if it works out of the box.
 
 import { bestCandidateForAttribute, bestCandidateOfType, bestFallbackCandidate } from "@/engine/codegen/fallback";
+import { toCamelCase, toPascalCase } from "@/engine/codegen/identifier";
 import { DEFAULT_TEST_ID_ATTRIBUTES } from "@/engine/stabilityConfig";
 import type { CodeGenerator } from "@/engine/codegen/types";
 import type { CapturedElement, LocatorCandidate } from "@/types";
@@ -57,10 +58,22 @@ function expression(element: CapturedElement): string {
   return `cy.xpath(${quoteSingle(xpath)})`;
 }
 
+// Cypress commands are queued rather than returning a persistent reference the way Playwright/
+// Selenium locators do, so the idiomatic Cypress Page Object re-runs cy.get()/cy.contains() on
+// every access via a getter, exported as a ready-to-use singleton instance — the pattern
+// Cypress's own docs and community page-object examples use, rather than a constructor-injected
+// class like the other frameworks here.
+function pageObject(className: string, elements: CapturedElement[]): string {
+  const name = toPascalCase(className);
+  const getters = elements.map((el) => `  get ${toCamelCase(el.name)}() {\n    return ${expression(el)};\n  }`);
+  return [`class ${name} {`, ...getters, `}`, ``, `export default new ${name}();`].join("\n");
+}
+
 export const cypressGenerator: CodeGenerator = {
   id: "cypress",
   label: "Cypress",
   fileExtension: "cy.js",
   generateDeclaration: expression,
   generateBlock: (elements) => elements.map(expression).join("\n"),
+  generatePageObject: pageObject,
 };

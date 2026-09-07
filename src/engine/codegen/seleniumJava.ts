@@ -3,7 +3,7 @@
 // By loginButton = By.xpath("//button[@id='loginButton']");
 
 import { escapeDoubleQuoted } from "@/engine/codegen/escape";
-import { toCamelCase } from "@/engine/codegen/identifier";
+import { toCamelCase, toPascalCase } from "@/engine/codegen/identifier";
 import { pickSeleniumStrategy, type SeleniumStrategyKind } from "@/engine/codegen/seleniumStrategy";
 import type { CodeGenerator } from "@/engine/codegen/types";
 import type { CapturedElement } from "@/types";
@@ -26,10 +26,27 @@ function declaration(element: CapturedElement): string {
   return `By ${toCamelCase(element.name)} = ${byExpression(element)};`;
 }
 
+function pageObject(className: string, elements: CapturedElement[]): string {
+  const name = toPascalCase(className);
+  const fields = elements.map((el) => `    private final By ${toCamelCase(el.name)} = ${byExpression(el)};`);
+  return [
+    `public class ${name} {`,
+    `    private final WebDriver driver;`,
+    ``,
+    `    public ${name}(WebDriver driver) {`,
+    `        this.driver = driver;`,
+    `    }`,
+    ``,
+    ...fields,
+    `}`,
+  ].join("\n");
+}
+
 export const seleniumJavaGenerator: CodeGenerator = {
   id: "selenium-java",
   label: "Selenium (Java)",
   fileExtension: "java",
   generateDeclaration: declaration,
   generateBlock: (elements) => elements.map(declaration).join("\n"),
+  generatePageObject: pageObject,
 };

@@ -25,10 +25,31 @@ function declaration(element: CapturedElement): string {
   return `By ${toPascalCase(element.name)} = ${byExpression(element)};`;
 }
 
+function pageObject(className: string, elements: CapturedElement[]): string {
+  const name = toPascalCase(className);
+  const properties = elements.map(
+    (el) => `    private By ${toPascalCase(el.name)} => ${byExpression(el)};`,
+  );
+  return [
+    `public class ${name}`,
+    `{`,
+    `    private readonly IWebDriver driver;`,
+    ``,
+    `    public ${name}(IWebDriver driver)`,
+    `    {`,
+    `        this.driver = driver;`,
+    `    }`,
+    ``,
+    ...properties,
+    `}`,
+  ].join("\n");
+}
+
 export const seleniumCsharpGenerator: CodeGenerator = {
   id: "selenium-csharp",
   label: "Selenium (C#)",
   fileExtension: "cs",
   generateDeclaration: declaration,
   generateBlock: (elements) => elements.map(declaration).join("\n"),
+  generatePageObject: pageObject,
 };
