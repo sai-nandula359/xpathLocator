@@ -1,7 +1,8 @@
-import { ChevronDown, ChevronRight, Copy, RefreshCw, Star, Wrench } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, RefreshCw, Star, Wand2, Wrench } from "lucide-react";
 import { useState } from "react";
 import type { CaptureSessionApi } from "@/hooks/useCaptureSession";
 import { validateCandidate } from "@/session/liveValidate";
+import { repairElement } from "@/session/repairLocator";
 import { classifyCandidates, scoreCandidate } from "@/engine/scorer";
 import { FRAMEWORKS } from "@/engine/codegen/frameworks";
 import { getCodeGenerator } from "@/engine/codegen/registry";
@@ -33,6 +34,7 @@ function formatMatchBadge(v: ValidationResult): string {
 
 export default function LocatorDetailsPanel({ api, webviewRef }: LocatorDetailsPanelProps) {
   const [retesting, setRetesting] = useState<string | null>(null);
+  const [repairing, setRepairing] = useState(false);
   const [builderOpen, setBuilderOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   // Which framework's code to show — a per-view UI choice, not a persisted setting (this project
@@ -96,6 +98,35 @@ export default function LocatorDetailsPanel({ api, webviewRef }: LocatorDetailsP
     }
   };
 
+  // section 34 — Locator Repair: re-validates every stored candidate against the live DOM and
+  // promotes whichever one is now the strongest unique replacement, for when the current Primary
+  // has gone stale (e.g. the id it depended on changed after a deploy).
+  const repair = async () => {
+    const webview = webviewRef.current;
+    if (!webview) return;
+    setRepairing(true);
+    try {
+      const outcome = await repairElement(webview, el);
+      api.updateElement(el.id, {
+        ...el,
+        candidates: outcome.candidates,
+        primaryLocatorId: outcome.newPrimary?.id ?? el.primaryLocatorId,
+      });
+      if (outcome.repaired) {
+        api.addToast(`Primary locator was broken — repaired to "${outcome.newPrimary!.value}".`, "success");
+      } else if (outcome.unrepairable) {
+        api.addToast(
+          "No valid replacement found among existing candidates — try re-capturing this element.",
+          "error",
+        );
+      } else {
+        api.addToast("Primary locator is already valid — no repair needed.", "info");
+      }
+    } finally {
+      setRepairing(false);
+    }
+  };
+
   // A manually-built candidate competes for Primary/Secondary the same way an automatically
   // generated one does — classifyCandidates re-derives every candidate's classification from
   // scratch, so this can genuinely take over the slot if it scores well and validated unique,
@@ -128,14 +159,25 @@ export default function LocatorDetailsPanel({ api, webviewRef }: LocatorDetailsP
             )}
           </div>
           {!collapsed && (
-            <button
-              onClick={() => setBuilderOpen(true)}
-              className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400"
-              title="Manually pick attributes to build a custom locator"
-            >
-              <Wrench className="w-3 h-3" />
-              Build Custom
-            </button>
+            <div className="flex-shrink-0 flex items-center gap-1.5">
+              <button
+                onClick={() => void repair()}
+                disabled={repairing}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 disabled:opacity-50"
+                title="Re-validate every candidate and promote a working replacement if the current Primary is broken"
+              >
+                <Wand2 className={`w-3 h-3 ${repairing ? "animate-pulse" : ""}`} />
+                Repair
+              </button>
+              <button
+                onClick={() => setBuilderOpen(true)}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400"
+                title="Manually pick attributes to build a custom locator"
+              >
+                <Wrench className="w-3 h-3" />
+                Build Custom
+              </button>
+            </div>
           )}
         </div>
       </div>
