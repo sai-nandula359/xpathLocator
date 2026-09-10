@@ -9,7 +9,7 @@
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const { pathToFileURL } = require("node:url");
-const { app, BrowserWindow, Menu, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, dialog, webContents } = require("electron");
 
 Menu.setApplicationMenu(null);
 
@@ -107,6 +107,25 @@ ipcMain.handle("import:openFile", async (_event, { filters }) => {
   if (canceled || filePaths.length === 0) return { ok: false, canceled: true };
   const content = await fs.readFile(filePaths[0], "utf-8");
   return { ok: true, filePath: filePaths[0], content };
+});
+
+// --- Responsive device emulation ----------------------------------------------------------
+// enableDeviceEmulation()/disableDeviceEmulation() only exist on webContents, not on the
+// <webview> tag itself — the renderer sends over the guest's webContents id (from the tag's own
+// getWebContentsId()) so it can be resolved here.
+
+ipcMain.handle("device:enable-emulation", (_event, { webContentsId, parameters }) => {
+  const wc = webContents.fromId(webContentsId);
+  if (!wc) return { ok: false };
+  wc.enableDeviceEmulation(parameters);
+  return { ok: true };
+});
+
+ipcMain.handle("device:disable-emulation", (_event, { webContentsId }) => {
+  const wc = webContents.fromId(webContentsId);
+  if (!wc) return { ok: false };
+  wc.disableDeviceEmulation();
+  return { ok: true };
 });
 
 // --- Window -------------------------------------------------------------------------------

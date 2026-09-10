@@ -25,4 +25,9 @@ contextBridge.exposeInMainWorld("captureStudio", {
     saveFile: (args) => ipcRenderer.invoke("export:saveFile", args),
     openFile: (args) => ipcRenderer.invoke("import:openFile", args),
   },
+  device: {
+    enableEmulation: (webContentsId, parameters) =>
+      ipcRenderer.invoke("device:enable-emulation", { webContentsId, parameters }),
+    disableEmulation: (webContentsId) => ipcRenderer.invoke("device:disable-emulation", { webContentsId }),
+  },
 });

@@ -52,6 +52,8 @@ function makeElement(overrides: Partial<CapturedElement> = {}): CapturedElement 
       limitedContext: null,
       pageUrl: "https://example.com/login",
       pageTitle: "Login",
+      viewportWidth: 1280,
+      viewportHeight: 800,
     },
     candidates: [primary],
     primaryLocatorId: primary.id,
@@ -135,5 +137,10 @@ describe("exportTxt", () => {
     expect(txt).toContain("Login Submit Button");
     expect(txt).toContain("[Primary]");
     expect(txt).toContain("//button[@data-testid='login-button']");
+  });
+
+  it("includes the viewport the element was captured at", () => {
+    const txt = exportTxt([makeElement()]);
+    expect(txt).toContain("Viewport: 1280×800");
   });
 });

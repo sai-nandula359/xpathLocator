@@ -8,7 +8,13 @@ function classificationLabel(c: string): string {
 
 export function exportTxt(elements: CapturedElement[]): string {
   const blocks = elements.map((el) => {
-    const lines = [`${el.name}`, `  Tag: ${el.snapshot.tag}`, `  Page: ${el.snapshot.pageUrl}`, ""];
+    const lines = [
+      `${el.name}`,
+      `  Tag: ${el.snapshot.tag}`,
+      `  Page: ${el.snapshot.pageUrl}`,
+      `  Viewport: ${el.snapshot.viewportWidth}×${el.snapshot.viewportHeight}`,
+      "",
+    ];
     const sorted = [...el.candidates].sort((a, b) => b.score.total - a.score.total);
     for (const c of sorted) {
       const badge = c.validation

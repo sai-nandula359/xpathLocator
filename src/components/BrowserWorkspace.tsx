@@ -1,6 +1,7 @@
-import { ArrowLeft, ArrowRight, Loader2, RotateCw, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, RotateCcw, RotateCw, Smartphone, X } from "lucide-react";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { CaptureSessionApi } from "@/hooks/useCaptureSession";
+import { DEVICE_CATEGORIES, DEVICE_PRESETS, findDevicePreset } from "@/devicePresets";
 import { useWebviewCapture, type WebviewCaptureApi } from "@/hooks/useWebviewCapture";
 
 interface BrowserWorkspaceProps {
@@ -9,9 +10,102 @@ interface BrowserWorkspaceProps {
   onWebviewApi: (webviewApi: WebviewCaptureApi) => void;
 }
 
+const DESKTOP_DEVICE_ID = "desktop";
+const RESPONSIVE_DEVICE_ID = "responsive";
+const DEFAULT_CUSTOM_SIZE = { width: 1280, height: 800 };
+
 export default function BrowserWorkspace({ api, webviewRef, onWebviewApi }: BrowserWorkspaceProps) {
   const [addressBarValue, setAddressBarValue] = useState(api.session.baseUrl);
   const webviewApi = useWebviewCapture(webviewRef, api);
+
+  // Responsive device emulation — resizes the webview's rendered viewport (and, for phones/
+  // tablets, its user agent) to a real device's, the same way Chrome DevTools' device toolbar
+  // does. Ctrl+Click capture needs no changes for this at all: webview-preload.cjs already reads
+  // whatever the guest page's own layout reports, which correctly reflects the emulated viewport
+  // once Electron's device emulation is active.
+  const [deviceId, setDeviceId] = useState(DESKTOP_DEVICE_ID);
+  const [rotated, setRotated] = useState(false);
+  const [customSize, setCustomSize] = useState(DEFAULT_CUSTOM_SIZE);
+  // Captured once, before any device emulation ever swaps it, so "Desktop" can restore the
+  // browser's real default user agent rather than being stuck on the last device's.
+  const defaultUserAgentRef = useRef<string | null>(null);
+
+  // The active preset's own (unrotated) profile — width/height plus scale factor/mobile flag/UA
+  // — for either a named device or a Responsive/custom size (which only has width/height; the
+  // rest are plain desktop defaults). Null on Desktop, where nothing is emulated at all.
+  const activePreset =
+    deviceId === DESKTOP_DEVICE_ID
+      ? null
+      : deviceId === RESPONSIVE_DEVICE_ID
+        ? { width: customSize.width, height: customSize.height, deviceScaleFactor: 1, mobile: false, userAgent: "" }
+        : findDevicePreset(deviceId);
+  // Rotate swaps width/height uniformly for a named preset and a Responsive/custom size alike —
+  // this is also exactly what's sent to enableDeviceEmulation below, so the webview's visual
+  // frame size and its actual emulated viewport never drift apart.
+  const frameSize = activePreset ? { width: rotated ? activePreset.height : activePreset.width, height: rotated ? activePreset.width : activePreset.height } : null;
+
+  useEffect(() => {
+    const webview = webviewRef.current;
+    if (!webview || defaultUserAgentRef.current) return;
+    try {
+      const ua = webview.getUserAgent();
+      if (ua) defaultUserAgentRef.current = ua;
+    } catch {
+      // Not attached yet — retried on the next url change below.
+    }
+  }, [webviewApi.url, webviewRef]);
+
+  useEffect(() => {
+    const webview = webviewRef.current;
+    if (!webview) return;
+    let cancelled = false;
+
+    void (async () => {
+      let contentsId: number;
+      try {
+        contentsId = webview.getWebContentsId();
+      } catch {
+        return; // not attached yet — retried on the next url change below
+      }
+      if (cancelled) return;
+
+      // setUserAgent() makes Chromium reload the page (so future requests carry the new UA),
+      // which in turn fires a url/navigation event that re-runs this very effect — only calling
+      // it when the UA is actually changing breaks that potential reload loop, and avoids the
+      // benign-but-noisy ERR_ABORTED a redundant reload-mid-reload produces.
+      const setUserAgentIfChanged = (ua: string) => {
+        if (ua && webview.getUserAgent() !== ua) webview.setUserAgent(ua);
+      };
+
+      if (!activePreset || !frameSize) {
+        await window.captureStudio.device.disableEmulation(contentsId);
+        if (defaultUserAgentRef.current) setUserAgentIfChanged(defaultUserAgentRef.current);
+        return;
+      }
+
+      // screenPosition deliberately always "desktop", even for phone/tablet presets: Electron's
+      // "mobile" mode inflates the reported window.innerWidth/innerHeight by a spurious ~2.6x
+      // factor regardless of deviceScaleFactor (confirmed by direct comparison — "desktop" with
+      // the exact same viewSize/screenSize reports precisely correct, correctly-DPR-scaled
+      // dimensions). The trade-off is losing Chromium's touch/hover-media-query emulation that
+      // "mobile" mode would otherwise add — viewport-width-driven responsive behavior (what
+      // actually matters for capturing locators at a given breakpoint) still works exactly right.
+      await window.captureStudio.device.enableEmulation(contentsId, {
+        screenPosition: "desktop",
+        screenSize: frameSize,
+        viewPosition: { x: 0, y: 0 },
+        deviceScaleFactor: activePreset.deviceScaleFactor,
+        viewSize: frameSize,
+        scale: 1,
+      });
+      setUserAgentIfChanged(activePreset.userAgent || defaultUserAgentRef.current || "");
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deviceId, rotated, customSize.width, customSize.height, webviewApi.url, webviewRef]);
 
   useEffect(() => onWebviewApi(webviewApi), [webviewApi, onWebviewApi]);
   useEffect(() => setAddressBarValue(webviewApi.url || api.session.baseUrl), [webviewApi.url, api.session.baseUrl]);
@@ -83,6 +177,62 @@ export default function BrowserWorkspace({ api, webviewRef, onWebviewApi }: Brow
             className="w-full px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:text-slate-100"
           />
         </form>
+
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <Smartphone className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+          <select
+            value={deviceId}
+            onChange={(e) => setDeviceId(e.target.value)}
+            data-testid="device-select"
+            title="Emulate a device/resolution — Ctrl+Click still captures within it"
+            className="px-2 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-slate-100"
+          >
+            <option value={DESKTOP_DEVICE_ID}>Desktop (No Emulation)</option>
+            <option value={RESPONSIVE_DEVICE_ID}>Responsive (Custom)</option>
+            {DEVICE_CATEGORIES.map((category) => (
+              <optgroup key={category} label={category}>
+                {DEVICE_PRESETS.filter((d) => d.category === category).map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.label} ({d.width}×{d.height})
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+
+          {deviceId === RESPONSIVE_DEVICE_ID && (
+            <>
+              <input
+                type="number"
+                min={200}
+                value={customSize.width}
+                onChange={(e) => setCustomSize((s) => ({ ...s, width: Number(e.target.value) || s.width }))}
+                data-testid="device-custom-width"
+                className="w-16 px-1.5 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-slate-100"
+              />
+              <span className="text-slate-400 text-[11px]">×</span>
+              <input
+                type="number"
+                min={200}
+                value={customSize.height}
+                onChange={(e) => setCustomSize((s) => ({ ...s, height: Number(e.target.value) || s.height }))}
+                data-testid="device-custom-height"
+                className="w-16 px-1.5 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:text-slate-100"
+              />
+            </>
+          )}
+
+          {deviceId !== DESKTOP_DEVICE_ID && (
+            <button
+              onClick={() => setRotated((v) => !v)}
+              title="Rotate"
+              data-testid="device-rotate"
+              className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-slate-200 dark:hover:bg-slate-800"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {webviewApi.frameNotice && (
@@ -98,15 +248,21 @@ export default function BrowserWorkspace({ api, webviewRef, onWebviewApi }: Brow
         </div>
       )}
 
-      <div className="relative flex-1 min-h-0 bg-slate-100 dark:bg-slate-950">
-        <webview
-          ref={webviewRef}
-          src={api.session.baseUrl || "about:blank"}
-          preload={window.captureStudio.webviewPreloadPath}
-          partition="persist:capture-session"
-          allowpopups
-          className="w-full h-full"
-        />
+      <div className={`relative flex-1 min-h-0 bg-slate-100 dark:bg-slate-950 ${frameSize ? "overflow-auto" : ""}`}>
+        <div
+          className={frameSize ? "flex justify-center py-4" : "w-full h-full"}
+          style={frameSize ? { minHeight: "100%" } : undefined}
+        >
+          <webview
+            ref={webviewRef}
+            src={api.session.baseUrl || "about:blank"}
+            preload={window.captureStudio.webviewPreloadPath}
+            partition="persist:capture-session"
+            allowpopups
+            className={frameSize ? "flex-shrink-0 border border-slate-300 dark:border-slate-700 rounded-lg shadow-lg" : "w-full h-full"}
+            style={frameSize ? { width: frameSize.width, height: frameSize.height } : undefined}
+          />
+        </div>
         {!api.session.baseUrl && (
           <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400 dark:text-slate-600 pointer-events-none">
             Enter a URL above to start browsing.

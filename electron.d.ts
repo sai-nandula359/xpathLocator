@@ -28,6 +28,15 @@ declare global {
     content?: string;
   }
 
+  interface DeviceEmulationParameters {
+    screenPosition: "desktop" | "mobile";
+    screenSize: { width: number; height: number };
+    viewPosition: { x: number; y: number };
+    deviceScaleFactor: number;
+    viewSize: { width: number; height: number };
+    scale?: number;
+  }
+
   interface CaptureStudioBridge {
     webviewPreloadPath: string;
     sessions: {
@@ -43,6 +52,10 @@ declare global {
         content: string;
       }) => Promise<SaveFileResult>;
       openFile: (args: { filters: FileDialogFilter[] }) => Promise<OpenFileResult>;
+    };
+    device: {
+      enableEmulation: (webContentsId: number, parameters: DeviceEmulationParameters) => Promise<{ ok: boolean }>;
+      disableEmulation: (webContentsId: number) => Promise<{ ok: boolean }>;
     };
   }
 
@@ -67,6 +80,9 @@ declare global {
     canGoBack(): boolean;
     canGoForward(): boolean;
     isLoading(): boolean;
+    getWebContentsId(): number;
+    getUserAgent(): string;
+    setUserAgent(userAgent: string): void;
   }
 
   // Alias used throughout the app's own code so it reads as "the Electron webview element"

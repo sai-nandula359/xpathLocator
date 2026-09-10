@@ -9,6 +9,8 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    include: ['tests/engine/**/*.test.ts', 'tests/session/**/*.test.ts'],
+    // tests/e2e/** uses *.spec.ts (Playwright, run separately via `npm run test:e2e`), so a
+    // broad tests/**/*.test.ts glob picks up every Vitest suite without also sweeping those in.
+    include: ['tests/**/*.test.ts'],
   },
 });
