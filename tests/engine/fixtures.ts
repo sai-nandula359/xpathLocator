@@ -29,6 +29,8 @@ export function makeSnapshot(overrides: Partial<ElementSnapshot> = {}): ElementS
     siblingAnchors: { previous: null, next: null },
     stateAnchor: null,
     frameSrc: null,
+    viewportWidth: 1280,
+    viewportHeight: 800,
     ...overrides,
   };
 }

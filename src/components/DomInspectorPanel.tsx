@@ -88,6 +88,12 @@ export default function DomInspectorPanel({ api }: DomInspectorPanelProps) {
               {snapshot.childTags.length > 0 ? snapshot.childTags.join(", ") : "—"}
             </div>
           </div>
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Viewport</div>
+            <div className="text-slate-700 dark:text-slate-200 font-mono" data-testid="dom-inspector-viewport">
+              {snapshot.viewportWidth}×{snapshot.viewportHeight}
+            </div>
+          </div>
         </div>
 
         {snapshot.limitedContext && (

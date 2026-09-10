@@ -178,6 +178,12 @@ export interface ElementSnapshot {
    * happens. Only tracks one level of nesting (matches what capture itself records); a locator
    * captured inside a frame-within-a-frame isn't live-validatable today. */
   frameSrc: string | null;
+  /** The top-level page's rendered viewport size at capture time (`window.innerWidth/Height`) —
+   * reflects whatever device/resolution emulation (see src/devicePresets.ts) was active, so a
+   * locator captured only inside a mobile layout can be told apart from one captured at desktop
+   * width. Always measurable, so not nullable — a capture always has *some* viewport. */
+  viewportWidth: number;
+  viewportHeight: number;
 }
 
 export interface CapturedElement {

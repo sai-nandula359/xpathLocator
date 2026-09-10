@@ -503,6 +503,11 @@ function buildSnapshot(doc, el, frameSrc) {
     siblingAnchors: resolveSiblingAnchors(doc, el),
     stateAnchor,
     frameSrc: frameSrc || null,
+    // The top-level page's own rendered viewport (not the iframe's, when capturing inside one) —
+    // this is exactly what device emulation resizes, so it doubles as a record of which
+    // device/resolution (if any) was active at capture time.
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
   };
 }
 
