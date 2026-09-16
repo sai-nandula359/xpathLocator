@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("captureStudio", {
   },
   files: {
     saveFile: (args) => ipcRenderer.invoke("export:saveFile", args),
+    saveExcel: (args) => ipcRenderer.invoke("export:saveExcel", args),
     openFile: (args) => ipcRenderer.invoke("import:openFile", args),
   },
   device: {

@@ -9,7 +9,8 @@
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const { pathToFileURL } = require("node:url");
-const { app, BrowserWindow, Menu, ipcMain, dialog, webContents } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, dialog, webContents, session } = require("electron");
+const ExcelJS = require("exceljs");
 
 Menu.setApplicationMenu(null);
 
@@ -98,6 +99,34 @@ ipcMain.handle("export:saveFile", async (_event, { defaultName, filters, content
   return { ok: true, filePath };
 });
 
+// section 46 — Excel Export. Unlike the other export formats (plain text, written via
+// export:saveFile), an xlsx file is a binary zip archive — building it needs a real library
+// (ExcelJS) and Node's fs, neither of which the sandboxed renderer has access to, so the
+// renderer only ever sends plain sheet data over here rather than a finished file's content.
+ipcMain.handle("export:saveExcel", async (_event, { defaultName, sheets }) => {
+  const win = BrowserWindow.getFocusedWindow();
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    defaultPath: defaultName,
+    filters: [{ name: "Excel Workbook", extensions: ["xlsx"] }],
+  });
+  if (canceled || !filePath) return { ok: false, canceled: true };
+
+  const workbook = new ExcelJS.Workbook();
+  for (const sheet of sheets) {
+    const ws = workbook.addWorksheet(sheet.name);
+    ws.addRow(sheet.columns);
+    ws.getRow(1).font = { bold: true };
+    for (const row of sheet.rows) ws.addRow(row);
+    ws.columns.forEach((col, i) => {
+      const header = String(sheet.columns[i] ?? "");
+      const longest = sheet.rows.reduce((max, row) => Math.max(max, String(row[i] ?? "").length), header.length);
+      col.width = Math.min(Math.max(longest + 2, 10), 60);
+    });
+  }
+  await workbook.xlsx.writeFile(filePath);
+  return { ok: true, filePath };
+});
+
 ipcMain.handle("import:openFile", async (_event, { filters }) => {
   const win = BrowserWindow.getFocusedWindow();
   const { canceled, filePaths } = await dialog.showOpenDialog(win, {
@@ -162,7 +191,23 @@ function createWindow() {
   return win;
 }
 
+// Every "Copy" button in the app (locator values, generated code, Page Objects) only ever
+// *writes* to the clipboard, which Chromium allows without a permission grant when triggered
+// from a real click. Explicitly granting clipboard-read/clipboard-sanitized-write too — rather
+// than leaving Chromium's default (which denies an ungranted read, so
+// navigator.clipboard.readText() silently resolves to "") — is what actually lets the app (and
+// the e2e suite, which verifies a copy button's own output by reading the clipboard back) trust
+// its own clipboard round-trip.
+function registerClipboardPermissions() {
+  const isClipboardPermission = (permission) => permission === "clipboard-read" || permission === "clipboard-sanitized-write";
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(isClipboardPermission(permission));
+  });
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => isClipboardPermission(permission));
+}
+
 app.whenReady().then(() => {
+  registerClipboardPermissions();
   createWindow();
 
   app.on("activate", () => {

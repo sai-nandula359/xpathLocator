@@ -113,3 +113,25 @@ npm run test:e2e  # Playwright e2e tests (launches the real Electron app)
 The e2e suite drives the actual packaged app against static fixtures in `tests/fixtures/` —
 capturing elements, validating uniqueness, switching sessions, exporting, and generating code —
 rather than mocking the Electron/webview layer.
+
+## Packaging
+
+```bash
+npm run electron:build
+```
+
+Produces two Windows artifacts in `release/` via electron-builder: a standalone NSIS installer
+(`Smart Locator Capture Studio-Setup-<version>.exe` — full install wizard, choose install
+directory, Start Menu/Desktop shortcuts, uninstaller) and a portable build
+(`Smart Locator Capture Studio-Portable-<version>.exe` — a single file that runs with no
+installation at all).
+
+**If this fails with `EPERM: operation not permitted, rename '...\win-unpacked.tmp' -> '...\win-unpacked'`**:
+something (commonly OneDrive's folder backup, or endpoint security real-time scanning) is
+holding a lock on freshly-extracted files inside a project that lives under a watched folder like
+`Documents`. Two ways around it, neither requiring any security/OneDrive setting changes:
+
+- Point the build output somewhere unwatched for one run:
+  `npx electron-builder --config.directories.output="%LOCALAPPDATA%\slcs-release"`
+- Ask IT for an exclusion on the project folder and `%LOCALAPPDATA%\electron-builder` if you hit
+  this repeatedly on a managed machine.
