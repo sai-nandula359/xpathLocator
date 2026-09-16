@@ -164,6 +164,21 @@ describe("exportMarkdown", () => {
     const md = exportMarkdown([el]);
     expect(md).toContain("A\\|B");
   });
+
+  // Regression for a real CodeQL finding ("Incomplete string escaping or encoding"): escaping
+  // only "|" without first escaping a literal backslash means a value already containing "\|"
+  // becomes "\\|" — read by a markdown table parser as one literal backslash followed by an
+  // *unescaped* pipe (the two backslashes pair off and cancel out), breaking out of the cell.
+  it("escapes a literal backslash before escaping pipes, so a value containing both parses correctly", () => {
+    const el = makeElement({
+      candidates: [candidate({ value: "A\\|B" })], // one literal backslash, then a pipe
+    });
+    const md = exportMarkdown([el]);
+    // One source backslash -> "\\" (escaped) plus the pipe's own "\|" = three backslash
+    // characters before the pipe, an odd count, so it actually escapes the pipe rather than the
+    // backslashes pairing off and leaving it as a live table-cell separator.
+    expect(md).toContain("A" + "\\".repeat(3) + "|B");
+  });
 });
 
 describe("buildExcelSheets", () => {

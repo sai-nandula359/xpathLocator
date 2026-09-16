@@ -15,7 +15,11 @@ function classificationLabel(c: string): string {
 }
 
 function escapeCell(value: string): string {
-  return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
+  // Backslash must be escaped *first* — escaping "|" alone would turn a value already
+  // containing "\|" into "\\|", which a markdown table parser reads as one literal backslash
+  // followed by an *unescaped* pipe (the two backslashes pair off and cancel out), breaking out
+  // of the table cell instead of staying inside it.
+  return value.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
 
 export function exportMarkdown(elements: CapturedElement[]): string {
