@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { exportCsv } from "@/export/csv";
+import { buildExcelSheets } from "@/export/excel";
 import { exportJson } from "@/export/json";
+import { exportMarkdown } from "@/export/markdown";
 import { exportTxt } from "@/export/txt";
 import type { CaptureSession, CapturedElement, LocatorCandidate } from "@/types";
 
@@ -142,5 +144,72 @@ describe("exportTxt", () => {
   it("includes the viewport the element was captured at", () => {
     const txt = exportTxt([makeElement()]);
     expect(txt).toContain("Viewport: 1280×800");
+  });
+});
+
+describe("exportMarkdown", () => {
+  it("renders a heading and a table row per element, same scope as TXT", () => {
+    const md = exportMarkdown([makeElement()]);
+    expect(md).toContain("## Login Submit Button");
+    expect(md).toContain("- **Tag:** `button`");
+    expect(md).toContain("- **Viewport:** 1280×800");
+    expect(md).toContain("| Classification | Type | Score | Status | Value |");
+    expect(md).toContain("| Primary | xpath-attribute | 99/100 | unique | `//button[@data-testid='login-button']` |");
+  });
+
+  it("escapes a pipe character in a locator value so it doesn't break the table", () => {
+    const el = makeElement({
+      candidates: [candidate({ value: "//div[@aria-label='A|B']" })],
+    });
+    const md = exportMarkdown([el]);
+    expect(md).toContain("A\\|B");
+  });
+});
+
+describe("buildExcelSheets", () => {
+  it("builds the doc's own suggested sheets: Elements, XPath, Frameworks, Metadata", () => {
+    const el = makeElement();
+    const sheets = buildExcelSheets(makeSession([el]), [el]);
+    expect(sheets.map((s) => s.name)).toEqual(["Elements", "XPath", "Frameworks", "Metadata"]);
+  });
+
+  it("Elements sheet has one row per element with the primary locator", () => {
+    const el = makeElement();
+    const sheets = buildExcelSheets(makeSession([el]), [el]);
+    const elementsSheet = sheets.find((s) => s.name === "Elements")!;
+    expect(elementsSheet.rows).toHaveLength(1);
+    expect(elementsSheet.rows[0]).toContain("//button[@data-testid='login-button']");
+    expect(elementsSheet.rows[0]).toContain("Unique");
+  });
+
+  it("XPath sheet only includes xpath-typed candidates, not css", () => {
+    const el = makeElement({
+      candidates: [
+        candidate({ id: "x1", type: "xpath-id", value: "//button[@id='loginButton']" }),
+        candidate({ id: "c1", type: "css", value: "#loginButton" }),
+      ],
+    });
+    const sheets = buildExcelSheets(makeSession([el]), [el]);
+    const xpathSheet = sheets.find((s) => s.name === "XPath")!;
+    expect(xpathSheet.rows).toHaveLength(1);
+    expect(xpathSheet.rows[0]).toContain("//button[@id='loginButton']");
+  });
+
+  it("Frameworks sheet has one column per supported framework, generating real code for each", () => {
+    const el = makeElement();
+    const sheets = buildExcelSheets(makeSession([el]), [el]);
+    const frameworksSheet = sheets.find((s) => s.name === "Frameworks")!;
+    expect(frameworksSheet.columns).toContain("Selenium (Java)");
+    expect(frameworksSheet.columns).toContain("Playwright (TypeScript)");
+    expect(frameworksSheet.rows[0].some((cell) => String(cell).includes("login-button"))).toBe(true);
+  });
+
+  it("Metadata sheet carries session-level fields", () => {
+    const el = makeElement();
+    const session = makeSession([el]);
+    const sheets = buildExcelSheets(session, [el]);
+    const metadataSheet = sheets.find((s) => s.name === "Metadata")!;
+    expect(metadataSheet.rows).toContainEqual(["Session Name", "Test Session"]);
+    expect(metadataSheet.rows).toContainEqual(["Element Count", 1]);
   });
 });

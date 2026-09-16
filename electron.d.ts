@@ -28,6 +28,12 @@ declare global {
     content?: string;
   }
 
+  interface ExcelSheet {
+    name: string;
+    columns: string[];
+    rows: (string | number)[][];
+  }
+
   interface DeviceEmulationParameters {
     screenPosition: "desktop" | "mobile";
     screenSize: { width: number; height: number };
@@ -51,6 +57,7 @@ declare global {
         filters: FileDialogFilter[];
         content: string;
       }) => Promise<SaveFileResult>;
+      saveExcel: (args: { defaultName: string; sheets: ExcelSheet[] }) => Promise<SaveFileResult>;
       openFile: (args: { filters: FileDialogFilter[] }) => Promise<OpenFileResult>;
     };
     device: {

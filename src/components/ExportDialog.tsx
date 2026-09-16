@@ -8,6 +8,14 @@ interface ExportDialogProps {
   onClose: () => void;
 }
 
+const FORMAT_LABEL: Record<ExportFormat, string> = {
+  json: "JSON",
+  txt: "TXT",
+  csv: "CSV",
+  markdown: "MD",
+  excel: "XLSX",
+};
+
 export default function ExportDialog({ api, onClose }: ExportDialogProps) {
   const [format, setFormat] = useState<ExportFormat>("json");
   // Defaults to "selected" when the user already has a checkbox selection from Captured
@@ -42,16 +50,16 @@ export default function ExportDialog({ api, onClose }: ExportDialogProps) {
         <div className="p-4 space-y-4 text-xs">
           <div>
             <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1.5">Format</div>
-            <div className="flex gap-2">
-              {(["json", "txt", "csv"] as const).map((f) => (
+            <div className="flex flex-wrap gap-2">
+              {(["json", "txt", "csv", "markdown", "excel"] as const).map((f) => (
                 <button
                   key={f}
                   onClick={() => setFormat(f)}
-                  className={`px-3 py-1 rounded-lg text-[11px] font-semibold uppercase ${
+                  className={`px-3 py-1 rounded-lg text-[11px] font-semibold ${
                     format === f ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                   }`}
                 >
-                  {f}
+                  {FORMAT_LABEL[f]}
                 </button>
               ))}
             </div>
