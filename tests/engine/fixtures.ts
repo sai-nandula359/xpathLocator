@@ -12,6 +12,7 @@ export function makeSnapshot(overrides: Partial<ElementSnapshot> = {}): ElementS
     parentAttributes: null,
     siblingIndex: 0,
     siblingCount: 1,
+    tagSiblingCount: 1,
     childTags: [],
     domDepth: 3,
     nearbyLabelText: null,

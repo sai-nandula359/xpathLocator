@@ -4,6 +4,7 @@ import type { CaptureSessionApi } from "@/hooks/useCaptureSession";
 import { validateCandidate } from "@/session/liveValidate";
 import { repairElement } from "@/session/repairLocator";
 import { classifyCandidates, scoreCandidate } from "@/engine/scorer";
+import { friendlyLocatorLabel } from "@/engine/locatorLabel";
 import { FRAMEWORKS } from "@/engine/codegen/frameworks";
 import { getCodeGenerator } from "@/engine/codegen/registry";
 import CustomLocatorBuilderModal from "@/components/CustomLocatorBuilderModal";
@@ -264,7 +265,9 @@ export default function LocatorDetailsPanel({ api, webviewRef }: LocatorDetailsP
                   >
                     {c.classification}
                   </span>
-                  <span className="text-[9px] font-mono uppercase text-slate-400">{c.type}</span>
+                  <span className="text-[9px] font-semibold uppercase text-slate-400" title={c.type}>
+                    {friendlyLocatorLabel(c)}
+                  </span>
                   {c.usesDynamicAttribute && (
                     <span className="text-[9px] font-bold text-amber-500" title="Uses an attribute that looks dynamically generated">
                       dynamic risk

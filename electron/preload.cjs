@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld("captureStudio", {
     saveFile: (args) => ipcRenderer.invoke("export:saveFile", args),
     saveExcel: (args) => ipcRenderer.invoke("export:saveExcel", args),
     openFile: (args) => ipcRenderer.invoke("import:openFile", args),
+    openSessionFile: (args) => ipcRenderer.invoke("import:openSessionFile", args),
   },
   device: {
     enableEmulation: (webContentsId, parameters) =>

@@ -1,5 +1,6 @@
-import { ChevronDown, ChevronRight, Copy, Pencil, Search, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, PencilLine, Pencil, Search, Star, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import BulkRenameModal from "@/components/BulkRenameModal";
 import type { CaptureSessionApi } from "@/hooks/useCaptureSession";
 import type { CapturedElement } from "@/types";
 
@@ -22,8 +23,34 @@ const FILTERS: { id: FilterId; label: string }[] = [
   { id: "low", label: "Low Stability" },
 ];
 
+type SortId = "captureOrder" | "name" | "score" | "tag";
+
+const SORTS: { id: SortId; label: string }[] = [
+  { id: "captureOrder", label: "Capture Order" },
+  { id: "name", label: "Name" },
+  { id: "score", label: "Score" },
+  { id: "tag", label: "Tag" },
+];
+
 function primaryOf(el: CapturedElement) {
   return el.candidates.find((c) => c.id === el.primaryLocatorId) ?? el.candidates[0] ?? null;
+}
+
+function sortElements(elements: CapturedElement[], sortBy: SortId): CapturedElement[] {
+  if (sortBy === "captureOrder") return elements;
+  const sorted = [...elements];
+  switch (sortBy) {
+    case "name":
+      sorted.sort((a, b) => a.name.localeCompare(b.name));
+      break;
+    case "score":
+      sorted.sort((a, b) => (primaryOf(b)?.score.total ?? 0) - (primaryOf(a)?.score.total ?? 0));
+      break;
+    case "tag":
+      sorted.sort((a, b) => a.snapshot.tag.localeCompare(b.snapshot.tag));
+      break;
+  }
+  return sorted;
 }
 
 function matchesFilter(el: CapturedElement, filter: FilterId): boolean {
@@ -57,14 +84,16 @@ function matchesFilter(el: CapturedElement, filter: FilterId): boolean {
 export default function CapturedElementsPanel({ api }: CapturedElementsPanelProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterId>("all");
+  const [sortBy, setSortBy] = useState<SortId>("captureOrder");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
   const [collapsed, setCollapsed] = useState(false);
+  const [bulkRenameOpen, setBulkRenameOpen] = useState(false);
   const selectAllRef = useRef<HTMLInputElement>(null);
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return api.session.elements.filter((el) => {
+    const filtered = api.session.elements.filter((el) => {
       if (!matchesFilter(el, filter)) return false;
       if (!term) return true;
       return (
@@ -73,7 +102,8 @@ export default function CapturedElementsPanel({ api }: CapturedElementsPanelProp
         primaryOf(el)?.value.toLowerCase().includes(term)
       );
     });
-  }, [api.session.elements, search, filter]);
+    return sortElements(filtered, sortBy);
+  }, [api.session.elements, search, filter, sortBy]);
 
   const selectedIds = api.checkedIds;
   const allVisibleChecked = visible.length > 0 && visible.every((el) => selectedIds.has(el.id));
@@ -156,13 +186,46 @@ export default function CapturedElementsPanel({ api }: CapturedElementsPanelProp
                 className="flex-shrink-0"
               />
               {selectedIds.size > 0 && (
-                <button
-                  onClick={deleteSelected}
-                  className="flex-shrink-0 flex items-center gap-1 text-[11px] font-semibold text-rose-500 hover:text-rose-600"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Delete {selectedIds.size}
-                </button>
+                <>
+                  <button
+                    onClick={() => setBulkRenameOpen(true)}
+                    title="Rename selected"
+                    className="flex-shrink-0 flex items-center gap-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                  >
+                    <PencilLine className="w-3.5 h-3.5" />
+                    Rename
+                  </button>
+                  <button
+                    onClick={() => api.setPrimaryLocatorBulk(selectedIds, "css")}
+                    title="Set primary locator to the best CSS candidate for each selected element"
+                    className="flex-shrink-0 text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                  >
+                    <Star className="w-3.5 h-3.5 inline mr-1" />
+                    CSS
+                  </button>
+                  <button
+                    onClick={() => api.setPrimaryLocatorBulk(selectedIds, "xpath")}
+                    title="Set primary locator to the best XPath candidate for each selected element"
+                    className="flex-shrink-0 text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                  >
+                    XPath
+                  </button>
+                  <button
+                    onClick={() => void api.copySelectedLocators(selectedIds)}
+                    title="Copy selected elements' primary locators"
+                    className="flex-shrink-0 flex items-center gap-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    Copy
+                  </button>
+                  <button
+                    onClick={deleteSelected}
+                    className="flex-shrink-0 flex items-center gap-1 text-[11px] font-semibold text-rose-500 hover:text-rose-600"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete {selectedIds.size}
+                  </button>
+                </>
               )}
             </div>
           )}
@@ -179,7 +242,7 @@ export default function CapturedElementsPanel({ api }: CapturedElementsPanelProp
                 className="w-full pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-905 border border-slate-200 dark:border-slate-800 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:text-slate-100"
               />
             </div>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap items-center gap-1">
               {FILTERS.map((f) => (
                 <button
                   key={f.id}
@@ -193,10 +256,34 @@ export default function CapturedElementsPanel({ api }: CapturedElementsPanelProp
                   {f.label}
                 </button>
               ))}
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortId)}
+                title="Sort"
+                data-testid="sort-select"
+                className="ml-auto px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 focus:outline-none"
+              >
+                {SORTS.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    Sort: {s.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </>
         )}
       </div>
+
+      {bulkRenameOpen && (
+        <BulkRenameModal
+          count={selectedIds.size}
+          onClose={() => setBulkRenameOpen(false)}
+          onConfirm={(prefix) => {
+            api.renameElementsBulk(selectedIds, prefix);
+            setBulkRenameOpen(false);
+          }}
+        />
+      )}
 
       {!collapsed && (
       <div className="flex-1 overflow-y-auto">

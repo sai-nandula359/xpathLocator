@@ -55,6 +55,13 @@ test.describe("Markdown and Excel export", () => {
     await window.getByRole("button", { name: "XLSX", exact: true }).click();
     await expect(exportButton).toBeEnabled();
 
+    // section 21/47 — bulk code export: every framework from the Page Object dialog is also
+    // selectable here as a plain export format (Export saves generateBlock()'s output directly).
+    await window.getByRole("button", { name: "Selenium (Java)", exact: true }).click();
+    await expect(exportButton).toBeEnabled();
+    await window.getByRole("button", { name: "Playwright (TypeScript)", exact: true }).click();
+    await expect(exportButton).toBeEnabled();
+
     await window.getByRole("button", { name: "Cancel" }).click();
     await expect(window.getByText("Export Session")).not.toBeVisible();
 

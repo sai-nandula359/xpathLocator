@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronDown, Plus, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { CaptureSessionApi } from "@/hooks/useCaptureSession";
 import { deleteSession, listSessions } from "@/session/sessionStore";
@@ -7,13 +7,14 @@ interface SessionDropdownProps {
   api: CaptureSessionApi;
   onNewSession: () => void;
   onOpenSession: (id: string) => void;
+  onImportSession: () => void;
 }
 
 /** Header control consolidating New Session / Open Session / delete into one dropdown: the
  * button always shows whichever session is currently active (defaulting to the most recently
  * created one, since that's whatever `api.session` currently is), and the panel lists every
  * saved session with a delete action right on each row. */
-export default function SessionDropdown({ api, onNewSession, onOpenSession }: SessionDropdownProps) {
+export default function SessionDropdown({ api, onNewSession, onOpenSession, onImportSession }: SessionDropdownProps) {
   const [open, setOpen] = useState(false);
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -77,6 +78,16 @@ export default function SessionDropdown({ api, onNewSession, onOpenSession }: Se
           >
             <Plus className="w-3.5 h-3.5" />
             New Session
+          </button>
+          <button
+            onClick={() => {
+              onImportSession();
+              setOpen(false);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 border-b border-slate-100 dark:border-slate-800 transition-colors"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Import Session…
           </button>
 
           <div className="max-h-72 overflow-y-auto">

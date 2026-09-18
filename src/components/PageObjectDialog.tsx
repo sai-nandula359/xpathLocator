@@ -4,6 +4,7 @@
 
 import { X } from "lucide-react";
 import { useMemo, useState } from "react";
+import Modal from "@/components/Modal";
 import { FRAMEWORKS } from "@/engine/codegen/frameworks";
 import { toPascalCase } from "@/engine/codegen/identifier";
 import { getCodeGenerator } from "@/engine/codegen/registry";
@@ -55,12 +56,11 @@ export default function PageObjectDialog({ api, onClose }: PageObjectDialogProps
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-4">
-      <div
-        role="dialog"
-        aria-label="Generate Page Object"
-        className="w-full max-w-lg max-h-[85vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-150 dark:border-slate-800"
-      >
+    <Modal
+      title="Generate Page Object"
+      onClose={onClose}
+      className="w-full max-w-lg max-h-[85vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-150 dark:border-slate-800"
+    >
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-150 dark:border-slate-800">
           <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Generate Page Object</h2>
           <button onClick={onClose} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
@@ -152,7 +152,6 @@ export default function PageObjectDialog({ api, onClose }: PageObjectDialogProps
             {busy ? "Saving…" : "Save to File"}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

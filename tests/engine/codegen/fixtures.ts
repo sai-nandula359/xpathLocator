@@ -1,4 +1,4 @@
-import { loginButtonSnapshot, usernameInputSnapshot } from "../fixtures";
+import { loginButtonSnapshot, makeSnapshot, usernameInputSnapshot } from "../fixtures";
 import type { CapturedElement, LocatorCandidate, ValidationResult } from "@/types";
 
 const ZERO_SCORE = {
@@ -88,4 +88,20 @@ export function usernameInputElement(): CapturedElement {
   });
   const cssCandidate = makeCandidate({ id: "cand-css", type: "css", value: "input[name='username']" });
   return makeCapturedElement("Username Input", snapshot, [nameCandidate, cssCandidate]);
+}
+
+// An <a> with visible text and no id/name/data-testid/single class — forces Selenium's strategy
+// picker down to Link Text (section 21), sourced from a live-validated engine/xpath/linkText.ts
+// candidate rather than snapshot text alone.
+export function navLinkElement(candidates?: LocatorCandidate[]): CapturedElement {
+  const snapshot = makeSnapshot({
+    tag: "a",
+    text: "Learn More",
+    innerText: "Learn More",
+    attributes: { href: "/learn-more" },
+  });
+  const resolved = candidates ?? [
+    makeCandidate({ id: "cand-linktext", type: "xpath-linktext", value: "//a[text()='Learn More']" }),
+  ];
+  return makeCapturedElement("Learn More Link", snapshot, resolved);
 }

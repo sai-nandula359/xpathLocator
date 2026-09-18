@@ -20,6 +20,15 @@ const MAX_ATTRIBUTE_TIER = 15;
 const COMBINATION_TIER = 3;
 const UNKNOWN_ATTRIBUTE_TIER = 12; // as weak as the least-preferred *recognized* attribute
 const UNATTRIBUTED_STRUCTURAL_TIER = MAX_ATTRIBUTE_TIER + 1;
+// Exact link text (Selenium's By.linkText) is just as strong/fragile a signal as an exact
+// text()/normalize-space() match — it's the <a>-specific version of the same idea — and partial
+// link text is the contains()-based sibling of that, exactly mirroring xpath-text's own
+// exact-vs-contains() split. Both share TEXT_TIER rather than getting their own bands: this tier
+// number also drives MAX_TIER below, and MAX_TIER shifts *every* attribute-keyed candidate's
+// attributeStability score (see scoreAttributeStability) — a prior bug here was exactly this,
+// a new structural tier nudging MAX_TIER just enough to flip a data-testid-vs-id tie (see the
+// regression-guard test in scorer.test.ts). Link text and position candidates are differentiated
+// from their tier-mates on domDependency/readability instead (below), not by inventing new tiers.
 const TEXT_TIER = MAX_ATTRIBUTE_TIER + 2;
 // section 17 "DOM relationship" — priority #10 of 11, deliberately low: an axis-based candidate
 // (parent::/ancestor::/following::/etc.) is validated and usable, but structurally fragile by
@@ -32,7 +41,8 @@ const AXIS_TIER = MAX_ATTRIBUTE_TIER + 3;
 // or insertion in the matched list silently points it at a different element — but still
 // meaningfully better than raw DOM position, since it's still keyed on a real attribute
 // underneath. See INDEXED_TIER's use in captureElement.ts for when this actually gets generated
-// (only as a last resort when nothing else validated as unique at all).
+// (only as a last resort when nothing else validated as unique at all). position()/last() are
+// pure DOM-order signals too (no attribute involved), so they share this tier as well.
 const INDEXED_TIER = MAX_ATTRIBUTE_TIER + 4;
 const ABSOLUTE_TIER = MAX_ATTRIBUTE_TIER + 5;
 const MAX_TIER = ABSOLUTE_TIER;
@@ -46,9 +56,15 @@ export function isPositionalCss(candidate: LocatorCandidate): boolean {
 
 function attributeTier(candidate: LocatorCandidate, settings: StabilitySettings): number {
   if (candidate.type === "xpath-absolute" || isPositionalCss(candidate)) return ABSOLUTE_TIER;
-  if (candidate.type === "xpath-indexed") return INDEXED_TIER;
+  if (candidate.type === "xpath-indexed" || candidate.type === "xpath-position") return INDEXED_TIER;
   if (candidate.type === "xpath-axis") return AXIS_TIER;
-  if (candidate.type === "xpath-text") return TEXT_TIER;
+  if (
+    candidate.type === "xpath-text" ||
+    candidate.type === "xpath-linktext" ||
+    candidate.type === "xpath-partial-linktext"
+  ) {
+    return TEXT_TIER;
+  }
   if (candidate.type === "xpath-combination" || !candidate.attributeName) {
     // css combination candidates also land here (no single attributeName recorded).
     return candidate.value.includes(" and ") || candidate.value.match(/\]\[/) ? COMBINATION_TIER : UNATTRIBUTED_STRUCTURAL_TIER;
@@ -106,6 +122,8 @@ function scoreDomDependency(candidate: LocatorCandidate): number {
       return 0;
     case "xpath-indexed":
       return 2; // still keyed on a real attribute, but position-dependent on top of that
+    case "xpath-position":
+      return 1; // pure DOM order, no attribute underneath at all — even more fragile than indexed
     case "xpath-axis":
       return candidate.axis ? (AXIS_DOM_DEPENDENCY[candidate.axis] ?? 4) : 4;
     case "xpath-id":
@@ -115,7 +133,10 @@ function scoreDomDependency(candidate: LocatorCandidate): number {
     case "xpath-combination":
       return 11;
     case "xpath-text":
+    case "xpath-linktext":
       return 9;
+    case "xpath-partial-linktext":
+      return 7;
     default:
       return 13;
   }
@@ -133,6 +154,9 @@ function scoreReadability(candidate: LocatorCandidate): number {
       case "xpath-indexed":
         base = 6; // still shows the underlying attribute predicate, just wrapped and indexed
         break;
+      case "xpath-position":
+        base = 7; // reads as plain XPath, unlike the opaque (expr)[N] wrapped form
+        break;
       case "xpath-combination":
         base = 6;
         break;
@@ -140,7 +164,11 @@ function scoreReadability(candidate: LocatorCandidate): number {
         base = 5;
         break;
       case "xpath-text":
-        base = candidate.value.includes("contains(") ? 6 : 8;
+      case "xpath-linktext":
+        base = 8;
+        break;
+      case "xpath-partial-linktext":
+        base = 6;
         break;
       default:
         base = 9;

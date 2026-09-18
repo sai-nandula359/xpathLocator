@@ -248,6 +248,31 @@ export default function BrowserWorkspace({ api, webviewRef, onWebviewApi }: Brow
         </div>
       )}
 
+      {webviewApi.pageError && (
+        <div
+          data-testid="page-error-banner"
+          className="flex items-center justify-between gap-3 px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 border-b border-rose-200 dark:border-rose-900 text-[11px] text-rose-700 dark:text-rose-300"
+        >
+          <span className="truncate">{webviewApi.pageError.message}</span>
+          <div className="flex-shrink-0 flex items-center gap-2">
+            {(webviewApi.pageError.kind === "crashed" || webviewApi.pageError.kind === "unresponsive") && (
+              <button
+                onClick={() => {
+                  webviewRef.current?.reload();
+                  webviewApi.dismissPageError();
+                }}
+                className="font-semibold underline"
+              >
+                Reload
+              </button>
+            )}
+            <button onClick={webviewApi.dismissPageError}>
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className={`relative flex-1 min-h-0 bg-slate-100 dark:bg-slate-950 ${frameSize ? "overflow-auto" : ""}`}>
         <div
           className={frameSize ? "flex justify-center py-4" : "w-full h-full"}
