@@ -70,4 +70,19 @@ test.describe("session dropdown", () => {
 
     await app.close();
   });
+
+  // Never actually clicked: it triggers a real, blocking native OS open-file dialog Playwright
+  // can't drive (same constraint documented in exportFormats.spec.ts for the save dialog) — the
+  // actual parse/reconstruct logic behind it is covered directly in tests/import/*.test.ts.
+  test("Import Session… is available from the same dropdown as New Session", async () => {
+    const app = await electron.launch({ args: [path.join(__dirname, "..", "..")] });
+    const window = await app.firstWindow();
+    await window.waitForSelector("text=Smart Locator Capture Studio");
+
+    await window.locator('button[title^="Current session"]').click();
+    await expect(window.getByRole("button", { name: "Import Session…" })).toBeVisible();
+    await expect(window.getByRole("button", { name: "New Session" })).toBeVisible();
+
+    await app.close();
+  });
 });

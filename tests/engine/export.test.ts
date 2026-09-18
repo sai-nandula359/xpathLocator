@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { seleniumJavaGenerator } from "@/engine/codegen/seleniumJava";
 import { exportCsv } from "@/export/csv";
 import { buildExcelSheets } from "@/export/excel";
+import { exportSession } from "@/export";
 import { exportJson } from "@/export/json";
 import { exportMarkdown } from "@/export/markdown";
 import { exportTxt } from "@/export/txt";
@@ -226,5 +228,44 @@ describe("buildExcelSheets", () => {
     const metadataSheet = sheets.find((s) => s.name === "Metadata")!;
     expect(metadataSheet.rows).toContainEqual(["Session Name", "Test Session"]);
     expect(metadataSheet.rows).toContainEqual(["Element Count", 1]);
+  });
+});
+
+// A code-generator id (e.g. "selenium-java") is also a valid ExportFormat — exportSession routes
+// it through the same generateBlock() the Page Object dialog already uses for per-element code,
+// rather than through the json/txt/csv/markdown/excel branches. window.captureStudio is stubbed
+// here the same way it would be provided by electron/preload.cjs in the real app.
+describe("exportSession — code-format routing (section 21/47's bulk code export)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("saves a code generator's generateBlock output, with that generator's own file extension", async () => {
+    const saveFile = vi.fn().mockResolvedValue({ ok: true, filePath: "LoginPage.java" });
+    vi.stubGlobal("window", { captureStudio: { files: { saveFile } } });
+
+    const el = makeElement();
+    await exportSession(makeSession([el]), "selenium-java", "all", new Set());
+
+    expect(saveFile).toHaveBeenCalledTimes(1);
+    const args = saveFile.mock.calls[0][0];
+    expect(args.defaultName).toBe("Test Session.java");
+    expect(args.content).toBe(seleniumJavaGenerator.generateBlock([el]));
+  });
+
+  it("still routes json/csv/markdown/txt/excel through their own structured export, not code generation", async () => {
+    const saveFile = vi.fn().mockResolvedValue({ ok: true, filePath: "x.json" });
+    vi.stubGlobal("window", { captureStudio: { files: { saveFile } } });
+
+    await exportSession(makeSession([makeElement()]), "json", "all", new Set());
+
+    expect(saveFile).toHaveBeenCalledTimes(1);
+    expect(saveFile.mock.calls[0][0].content).toContain('"session": "Test Session"');
+  });
+
+  it("returns a non-canceled failure for an unrecognized format, rather than throwing", async () => {
+    vi.stubGlobal("window", { captureStudio: { files: { saveFile: vi.fn() } } });
+    const result = await exportSession(makeSession([makeElement()]), "not-a-real-format", "all", new Set());
+    expect(result).toEqual({ ok: false, canceled: false });
   });
 });

@@ -11,7 +11,14 @@ export type XPathCandidateType =
   | "xpath-combination"
   | "xpath-text"
   | "xpath-axis"
-  | "xpath-indexed";
+  | "xpath-indexed"
+  // section 21 — Link Text / Partial Link Text (Selenium's By.linkText/By.partialLinkText),
+  // only ever produced for <a> tags — see engine/xpath/linkText.ts.
+  | "xpath-linktext"
+  | "xpath-partial-linktext"
+  // section 15 — position()/last(), a more readable native alternative to the (expr)[N]
+  // indexed fallback — see engine/xpath/position.ts.
+  | "xpath-position";
 
 export type LocatorType = XPathCandidateType | "css";
 
@@ -154,6 +161,10 @@ export interface ElementSnapshot {
   parentAttributes: ElementAttributes | null;
   siblingIndex: number;
   siblingCount: number;
+  /** Count of the parent's children sharing this element's own tag name (unlike siblingCount,
+   * which counts every child regardless of tag) — the value XPath's position()/last() actually
+   * operate over for a `tag[position()=N]`/`tag[last()]` step. See engine/xpath/position.ts. */
+  tagSiblingCount: number;
   childTags: string[];
   domDepth: number;
   nearbyLabelText: string | null;

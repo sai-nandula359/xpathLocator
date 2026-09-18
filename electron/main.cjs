@@ -138,6 +138,41 @@ ipcMain.handle("import:openFile", async (_event, { filters }) => {
   return { ok: true, filePath: filePaths[0], content };
 });
 
+// section 64 — Session Import. .xlsx is a binary zip archive, same reason export:saveExcel above
+// builds workbooks here rather than in the sandboxed renderer — reading it as UTF-8 text (like
+// the plain-text branch above) would corrupt it, so this reads the raw bytes and hands ExcelJS
+// the buffer directly, returning the "Elements" sheet's own rows (header included) rather than a
+// finished CaptureSession — src/import/excel.ts owns turning those rows back into one.
+ipcMain.handle("import:openSessionFile", async (_event, { filters }) => {
+  const win = BrowserWindow.getFocusedWindow();
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    filters,
+    properties: ["openFile"],
+  });
+  if (canceled || filePaths.length === 0) return { ok: false, canceled: true };
+
+  const filePath = filePaths[0];
+  if (!filePath.toLowerCase().endsWith(".xlsx")) {
+    const content = await fs.readFile(filePath, "utf-8");
+    return { ok: true, filePath, format: "text", content };
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(filePath);
+  const worksheet = workbook.getWorksheet("Elements") ?? workbook.worksheets[0];
+  if (!worksheet) return { ok: false, canceled: false, error: "Workbook has no sheets." };
+
+  const rows = [];
+  worksheet.eachRow((row) => {
+    // ExcelJS's row.values is 1-indexed with a leading empty slot — slice it off, and stringify
+    // every cell so the renderer gets the same plain (string | number) shape export:saveExcel
+    // sends the other way.
+    const values = row.values.slice(1).map((v) => (v == null ? "" : v));
+    rows.push(values);
+  });
+  return { ok: true, filePath, format: "excel", rows };
+});
+
 // --- Responsive device emulation ----------------------------------------------------------
 // enableDeviceEmulation()/disableDeviceEmulation() only exist on webContents, not on the
 // <webview> tag itself — the renderer sends over the guest's webContents id (from the tag's own

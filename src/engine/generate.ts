@@ -10,6 +10,8 @@ import { generateSelfAxis } from "@/engine/xpath/axes/self";
 import { generateSiblingAxis } from "@/engine/xpath/axes/sibling";
 import { generateStateAnchorAxis } from "@/engine/xpath/axes/stateAnchor";
 import { generateAttribute } from "@/engine/xpath/attribute";
+import { generateLinkText } from "@/engine/xpath/linkText";
+import { generatePosition } from "@/engine/xpath/position";
 import { generatePrefixCandidates } from "@/engine/xpath/prefix";
 import { generateRelative } from "@/engine/xpath/relative";
 import { generateText } from "@/engine/xpath/text";
@@ -40,6 +42,8 @@ export function generateCandidates(
     ...generateAttribute(snapshot, settings),
     ...generatePrefixCandidates(snapshot, settings),
     ...generateText(snapshot),
+    ...generateLinkText(snapshot),
+    ...generatePosition(snapshot),
     ...generateCss(snapshot, settings),
     ...generateAbsolute(snapshot),
     ...generatePositionalCss(snapshot),

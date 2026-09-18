@@ -28,6 +28,18 @@ declare global {
     content?: string;
   }
 
+  interface OpenSessionFileResult {
+    ok: boolean;
+    canceled?: boolean;
+    error?: string;
+    filePath?: string;
+    format?: "text" | "excel";
+    /** Present when format is "text" (a .json or .csv file read as UTF-8). */
+    content?: string;
+    /** Present when format is "excel" — the "Elements" worksheet's own rows, header included. */
+    rows?: (string | number)[][];
+  }
+
   interface ExcelSheet {
     name: string;
     columns: string[];
@@ -59,6 +71,7 @@ declare global {
       }) => Promise<SaveFileResult>;
       saveExcel: (args: { defaultName: string; sheets: ExcelSheet[] }) => Promise<SaveFileResult>;
       openFile: (args: { filters: FileDialogFilter[] }) => Promise<OpenFileResult>;
+      openSessionFile: (args: { filters: FileDialogFilter[] }) => Promise<OpenSessionFileResult>;
     };
     device: {
       enableEmulation: (webContentsId: number, parameters: DeviceEmulationParameters) => Promise<{ ok: boolean }>;

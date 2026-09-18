@@ -487,6 +487,7 @@ function buildSnapshot(doc, el, frameSrc) {
     parentAttributes: parent ? collectAttributes(parent) : null,
     siblingIndex: siblings.indexOf(el),
     siblingCount: siblings.length,
+    tagSiblingCount: siblings.filter((s) => s.tagName === el.tagName).length,
     childTags: Array.from(el.children).map((c) => c.tagName.toLowerCase()),
     domDepth: ancestorChainFor(el).length,
     nearbyLabelText: resolveLabelElement(doc, el, attrs)?.textContent.trim() || null,

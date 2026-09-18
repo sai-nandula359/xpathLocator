@@ -14,6 +14,7 @@ const STRATEGY_PREFIX: Record<SeleniumStrategyKind, string> = {
   name: "name",
   className: "css",
   linkText: "link",
+  partialLinkText: "partial link",
   css: "css",
   xpath: "xpath",
 };

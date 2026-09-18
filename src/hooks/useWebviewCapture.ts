@@ -8,6 +8,41 @@ interface WebviewIpcMessageEvent extends Event {
   args: unknown[];
 }
 
+interface WebviewDidFailLoadEvent extends Event {
+  errorCode: number;
+  errorDescription: string;
+  validatedURL: string;
+  isMainFrame: boolean;
+}
+
+interface WebviewRenderProcessGoneEvent extends Event {
+  details: { reason: string; exitCode: number };
+}
+
+interface WebviewConsoleMessageEvent extends Event {
+  // Electron has changed this field's type across versions (a 0-3 severity number in older
+  // releases, a "error"/"warning"/... string in newer ones) — isConsoleError() below accepts
+  // either rather than assuming one.
+  level: number | string;
+  message: string;
+  line: number;
+  sourceId: string;
+}
+
+export interface PageError {
+  kind: "load-failed" | "crashed" | "unresponsive" | "console-error";
+  message: string;
+}
+
+function isConsoleError(level: number | string): boolean {
+  return level === "error" || level === 3;
+}
+
+// -3 is Chromium's ERR_ABORTED — fires on perfectly ordinary cancelled/superseded navigations
+// (the user typed a new URL before the old one finished, a session's own reload-on-switch, ...),
+// not a real failure, so it's the one errorCode this deliberately never surfaces.
+const ERR_ABORTED = -3;
+
 export function useWebviewCapture(webviewRef: RefObject<ElectronWebviewElement | null>, api: CaptureSessionApi) {
   const [captureModeEnabled, setCaptureModeEnabled] = useState(true);
   const [url, setUrl] = useState("");
@@ -17,6 +52,7 @@ export function useWebviewCapture(webviewRef: RefObject<ElectronWebviewElement |
   const [canGoForward, setCanGoForward] = useState(false);
   const [duplicatePrompt, setDuplicatePrompt] = useState<CaptureOutcome | null>(null);
   const [frameNotice, setFrameNotice] = useState<string[] | null>(null);
+  const [pageError, setPageError] = useState<PageError | null>(null);
 
   // `api` is a fresh object every render (useCaptureSession doesn't memoize its return value),
   // and captureModeEnabled changes on every toggle — closing over either directly in the
@@ -125,8 +161,38 @@ export function useWebviewCapture(webviewRef: RefObject<ElectronWebviewElement |
       pushCaptureMode(captureModeRef.current);
       syncNavState();
     };
-    const onStartLoading = () => setIsLoading(true);
+    // Deliberately not cleared in onDomReady/onStopLoading: after a failed navigation, Chromium
+    // still fires dom-ready (and did-stop-loading) for the internal error interstitial it shows
+    // in place of the page — clearing there wiped the banner within milliseconds of ever showing
+    // it. did-start-loading, by contrast, only fires when a *new* navigation attempt begins, so
+    // clearing there discards a stale error right as a fresh attempt starts, without erasing the
+    // error this same attempt is about to (re-)report a moment later if it fails again too.
+    const onStartLoading = () => {
+      setIsLoading(true);
+      setPageError(null);
+    };
     const onStopLoading = () => setIsLoading(false);
+
+    const onDidFailLoad = (event: Event) => {
+      const e = event as WebviewDidFailLoadEvent;
+      // Treat a missing/undefined isMainFrame as "don't know, so don't suppress it" rather than
+      // silently dropping the failure — only an explicit `false` (a subframe, e.g. an ad iframe
+      // failing to load) is excluded.
+      if (e.isMainFrame === false || e.errorCode === ERR_ABORTED) return;
+      setPageError({ kind: "load-failed", message: `${e.errorDescription} (${e.validatedURL})` });
+    };
+    const onRenderProcessGone = (event: Event) => {
+      const e = event as WebviewRenderProcessGoneEvent;
+      if (e.details.reason === "clean-exit") return;
+      setPageError({ kind: "crashed", message: `The page crashed (${e.details.reason}).` });
+    };
+    const onUnresponsive = () => setPageError({ kind: "unresponsive", message: "The page has stopped responding." });
+    const onResponsive = () => setPageError((prev) => (prev?.kind === "unresponsive" ? null : prev));
+    const onConsoleMessage = (event: Event) => {
+      const e = event as WebviewConsoleMessageEvent;
+      if (!isConsoleError(e.level)) return;
+      setPageError({ kind: "console-error", message: e.message });
+    };
 
     webview.addEventListener("ipc-message", onIpc);
     webview.addEventListener("dom-ready", onDomReady);
@@ -134,6 +200,11 @@ export function useWebviewCapture(webviewRef: RefObject<ElectronWebviewElement |
     webview.addEventListener("did-navigate-in-page", syncNavState);
     webview.addEventListener("did-start-loading", onStartLoading);
     webview.addEventListener("did-stop-loading", onStopLoading);
+    webview.addEventListener("did-fail-load", onDidFailLoad);
+    webview.addEventListener("render-process-gone", onRenderProcessGone);
+    webview.addEventListener("unresponsive", onUnresponsive);
+    webview.addEventListener("responsive", onResponsive);
+    webview.addEventListener("console-message", onConsoleMessage);
 
     return () => {
       webview.removeEventListener("ipc-message", onIpc);
@@ -142,6 +213,11 @@ export function useWebviewCapture(webviewRef: RefObject<ElectronWebviewElement |
       webview.removeEventListener("did-navigate-in-page", syncNavState);
       webview.removeEventListener("did-start-loading", onStartLoading);
       webview.removeEventListener("did-stop-loading", onStopLoading);
+      webview.removeEventListener("did-fail-load", onDidFailLoad);
+      webview.removeEventListener("render-process-gone", onRenderProcessGone);
+      webview.removeEventListener("unresponsive", onUnresponsive);
+      webview.removeEventListener("responsive", onResponsive);
+      webview.removeEventListener("console-message", onConsoleMessage);
     };
   }, [webviewRef, handleCaptured, pushCaptureMode]);
 
@@ -168,6 +244,8 @@ export function useWebviewCapture(webviewRef: RefObject<ElectronWebviewElement |
     resolveDuplicate,
     frameNotice,
     dismissFrameNotice: () => setFrameNotice(null),
+    pageError,
+    dismissPageError: () => setPageError(null),
     navigateTo,
   };
 }

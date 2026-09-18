@@ -10,6 +10,7 @@ interface HeaderProps {
   onToggleDarkMode: () => void;
   onNewSession: () => void;
   onOpenSession: (id: string) => void;
+  onImportSession: () => void;
   onOpenExport: () => void;
   onOpenPageObject: () => void;
 }
@@ -21,6 +22,7 @@ export default function Header({
   onToggleDarkMode,
   onNewSession,
   onOpenSession,
+  onImportSession,
   onOpenExport,
   onOpenPageObject,
 }: HeaderProps) {
@@ -49,7 +51,12 @@ export default function Header({
           </div>
 
           <div className="flex items-center space-x-1.5 flex-shrink-0">
-            <SessionDropdown api={api} onNewSession={onNewSession} onOpenSession={onOpenSession} />
+            <SessionDropdown
+              api={api}
+              onNewSession={onNewSession}
+              onOpenSession={onOpenSession}
+              onImportSession={onImportSession}
+            />
             <button
               onClick={() => void api.saveSession()}
               className="p-2 border border-gray-150 dark:border-slate-850 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-gray-500 dark:text-gray-400"

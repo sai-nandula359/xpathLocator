@@ -11,7 +11,8 @@ import NewSessionModal from "@/components/NewSessionModal";
 import PageObjectDialog from "@/components/PageObjectDialog";
 import { useCaptureSession } from "@/hooks/useCaptureSession";
 import type { WebviewCaptureApi } from "@/hooks/useWebviewCapture";
-import { loadSession } from "@/session/sessionStore";
+import { importSession } from "@/import";
+import { loadSession, saveSession as persistSessionToDisk } from "@/session/sessionStore";
 
 type ModalKind = "new-session" | "export" | "page-object" | null;
 
@@ -78,6 +79,26 @@ export default function App() {
     [api],
   );
 
+  // section 64 — Session Import. Persisted to disk immediately (same as startNewSession/
+  // openSession above) so it shows up in the session dropdown right away rather than only after
+  // the next autosave.
+  const importSessionAndLoad = useCallback(async () => {
+    const result = await importSession();
+    if (!result.ok || !result.session) {
+      if (!result.canceled) api.addToast(result.error ?? "Import failed.", "error");
+      return;
+    }
+    try {
+      if (api.hasActiveSession) await api.saveSession();
+      await persistSessionToDisk(result.session);
+      api.replaceSession(result.session);
+      api.addToast(`Imported "${result.session.name}" (${result.session.elements.length} elements).`, "success");
+    } catch {
+      api.addToast("Imported the file, but couldn't save it to disk.", "error");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api]);
+
   // Global keyboard shortcuts (section 54) — these only see key events that reach the host
   // document; while focus is inside the <webview>'s own page, the guest's own preload script
   // (webview-preload.cjs) is what handles Ctrl+Shift+C / Esc for capture mode instead.
@@ -126,6 +147,8 @@ export default function App() {
             resolveDuplicate: () => {},
             frameNotice: null,
             dismissFrameNotice: () => {},
+            pageError: null,
+            dismissPageError: () => {},
             navigateTo: () => {},
           }
         }
@@ -133,6 +156,7 @@ export default function App() {
         onToggleDarkMode={toggleDarkMode}
         onNewSession={() => setModal("new-session")}
         onOpenSession={(id) => void openSession(id)}
+        onImportSession={() => void importSessionAndLoad()}
         onOpenExport={() => setModal("export")}
         onOpenPageObject={() => setModal("page-object")}
       />
@@ -163,7 +187,11 @@ export default function App() {
         <DuplicatePromptModal outcome={webviewApi.duplicatePrompt} onResolve={webviewApi.resolveDuplicate} />
       )}
 
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-full">
+      <div
+        role="status"
+        aria-live="polite"
+        className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-full"
+      >
         {api.toasts.map((t) => {
           const style =
             t.type === "success"

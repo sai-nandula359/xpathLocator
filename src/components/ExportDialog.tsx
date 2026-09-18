@@ -1,5 +1,7 @@
 import { X } from "lucide-react";
 import { useState } from "react";
+import Modal from "@/components/Modal";
+import { FRAMEWORKS } from "@/engine/codegen/frameworks";
 import { exportSession, type ExportFormat, type ExportScope } from "@/export";
 import type { CaptureSessionApi } from "@/hooks/useCaptureSession";
 
@@ -8,13 +10,14 @@ interface ExportDialogProps {
   onClose: () => void;
 }
 
-const FORMAT_LABEL: Record<ExportFormat, string> = {
+const STRUCTURED_FORMAT_LABEL: Record<string, string> = {
   json: "JSON",
   txt: "TXT",
   csv: "CSV",
   markdown: "MD",
   excel: "XLSX",
 };
+const STRUCTURED_FORMATS = Object.keys(STRUCTURED_FORMAT_LABEL);
 
 export default function ExportDialog({ api, onClose }: ExportDialogProps) {
   const [format, setFormat] = useState<ExportFormat>("json");
@@ -39,19 +42,22 @@ export default function ExportDialog({ api, onClose }: ExportDialogProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-4">
-      <div className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-150 dark:border-slate-800">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-150 dark:border-slate-800">
-          <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Export Session</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="p-4 space-y-4 text-xs">
+    <Modal
+      title="Export Session"
+      onClose={onClose}
+      className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-150 dark:border-slate-800"
+    >
+      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-150 dark:border-slate-800">
+        <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Export Session</h2>
+        <button onClick={onClose} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="p-4 space-y-4 text-xs">
           <div>
             <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1.5">Format</div>
             <div className="flex flex-wrap gap-2">
-              {(["json", "txt", "csv", "markdown", "excel"] as const).map((f) => (
+              {STRUCTURED_FORMATS.map((f) => (
                 <button
                   key={f}
                   onClick={() => setFormat(f)}
@@ -59,7 +65,26 @@ export default function ExportDialog({ api, onClose }: ExportDialogProps) {
                     format === f ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                   }`}
                 >
-                  {FORMAT_LABEL[f]}
+                  {STRUCTURED_FORMAT_LABEL[f]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1.5">
+              Or Generate Code
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {FRAMEWORKS.map((fw) => (
+                <button
+                  key={fw.id}
+                  onClick={() => setFormat(fw.id)}
+                  className={`px-3 py-1 rounded-lg text-[11px] font-semibold ${
+                    format === fw.id ? "bg-blue-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                  }`}
+                >
+                  {fw.label}
                 </button>
               ))}
             </div>
@@ -103,7 +128,6 @@ export default function ExportDialog({ api, onClose }: ExportDialogProps) {
             {busy ? "Exporting…" : "Export"}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,3 +1,4 @@
+import Modal from "@/components/Modal";
 import type { CaptureOutcome } from "@/session/captureElement";
 
 interface DuplicatePromptModalProps {
@@ -7,8 +8,11 @@ interface DuplicatePromptModalProps {
 
 export default function DuplicatePromptModal({ outcome, onResolve }: DuplicatePromptModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-4">
-      <div className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-150 dark:border-slate-800 p-4">
+    <Modal
+      title="Possible Duplicate Capture"
+      onClose={() => onResolve("cancel")}
+      className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-150 dark:border-slate-800 p-4"
+    >
         <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-1">Possible Duplicate Capture</h2>
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
           This looks like the same element as <span className="font-semibold">{outcome.duplicateOf?.name}</span>,
@@ -34,7 +38,6 @@ export default function DuplicatePromptModal({ outcome, onResolve }: DuplicatePr
             Cancel
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

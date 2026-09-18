@@ -3,16 +3,15 @@
 // format this same decision in their own syntax).
 
 import { bestCandidateForAttribute, bestCandidateOfType, bestFallbackCandidate } from "@/engine/codegen/fallback";
+import { PARTIAL_LINK_TEXT_LENGTH } from "@/engine/xpath/linkText";
 import type { CapturedElement, LocatorCandidate } from "@/types";
 
-export type SeleniumStrategyKind = "id" | "name" | "className" | "linkText" | "css" | "xpath";
+export type SeleniumStrategyKind = "id" | "name" | "className" | "linkText" | "partialLinkText" | "css" | "xpath";
 
 export interface SeleniumStrategy {
   kind: SeleniumStrategyKind;
   value: string;
 }
-
-const MAX_LINK_TEXT_LENGTH = 60;
 
 function isGoodEnough(candidate: LocatorCandidate | null): candidate is LocatorCandidate {
   if (!candidate) return false;
@@ -43,11 +42,21 @@ export function pickSeleniumStrategy(element: CapturedElement): SeleniumStrategy
     }
   }
 
-  if (snapshot.tag === "a") {
+  // Sourced from engine/xpath/linkText.ts's generated, live-validated candidates rather than
+  // recomputing "is this a good link text" from scratch — isGoodEnough() already accounts for
+  // dynamic-looking text and non-unique validation the same way every other strategy above does.
+  // The By.linkText/By.partialLinkText API itself takes plain text (not an XPath string), so the
+  // actual value still comes from the snapshot — the candidate only gates *whether* to use it.
+  const exactLinkText = bestCandidateOfType(element, (c) => c.type === "xpath-linktext" && isGoodEnough(c));
+  if (exactLinkText) {
     const text = (snapshot.text || snapshot.innerText).trim();
-    if (text && text.length <= MAX_LINK_TEXT_LENGTH) {
-      return { kind: "linkText", value: text };
-    }
+    if (text) return { kind: "linkText", value: text };
+  }
+
+  const partialLinkText = bestCandidateOfType(element, (c) => c.type === "xpath-partial-linktext" && isGoodEnough(c));
+  if (partialLinkText) {
+    const text = (snapshot.text || snapshot.innerText).trim().slice(0, PARTIAL_LINK_TEXT_LENGTH);
+    if (text) return { kind: "partialLinkText", value: text };
   }
 
   const css = bestCandidateOfType(element, (c) => c.type === "css" && isGoodEnough(c));

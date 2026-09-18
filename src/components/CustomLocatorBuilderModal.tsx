@@ -9,6 +9,7 @@
 
 import { Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import Modal from "@/components/Modal";
 import { buildCustomXPath } from "@/engine/customLocator";
 import { isDynamicAttributeName, isDynamicValue } from "@/engine/dynamicAttributeDetector";
 import { scoreCandidate } from "@/engine/scorer";
@@ -158,12 +159,11 @@ export default function CustomLocatorBuilderModal({ element, webviewRef, onClose
   const canSave = !loading && !saving && !!preview?.validation?.valid;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-4">
-      <div
-        role="dialog"
-        aria-label="Build Custom Locator"
-        className="w-full max-w-lg max-h-[85vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-150 dark:border-slate-800"
-      >
+    <Modal
+      title="Build Custom Locator"
+      onClose={onClose}
+      className="w-full max-w-lg max-h-[85vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-150 dark:border-slate-800"
+    >
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-150 dark:border-slate-800">
           <div>
             <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Build Custom Locator</h2>
@@ -245,7 +245,6 @@ export default function CustomLocatorBuilderModal({ element, webviewRef, onClose
             {saving ? "Adding…" : "Add as Candidate"}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

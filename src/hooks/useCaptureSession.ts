@@ -140,6 +140,80 @@ export function useCaptureSession() {
     }));
   }, []);
 
+  // Bulk rename: numbers the selected elements, in their current session order, as
+  // "${basePrefix}_1", "${basePrefix}_2", ... — not a literal shared name, which would leave
+  // every selected element indistinguishable from the rest.
+  const renameElementsBulk = useCallback(
+    (ids: Set<string>, basePrefix: string) => {
+      if (ids.size === 0) return;
+      let n = 0;
+      setSession((prev) => ({
+        ...prev,
+        elements: prev.elements.map((el) => {
+          if (!ids.has(el.id)) return el;
+          n += 1;
+          return { ...el, name: `${basePrefix}_${n}`, updatedAt: new Date().toISOString() };
+        }),
+        updatedAt: new Date().toISOString(),
+      }));
+      addToast(`Renamed ${ids.size} element${ids.size === 1 ? "" : "s"}.`, "success");
+    },
+    [addToast],
+  );
+
+  // Bulk primary-locator strategy: a pure pointer swap per element (same as setPrimaryLocator
+  // above) — repoints each selected element's primaryLocatorId at its own highest-scored
+  // candidate matching `family`, leaving elements with no candidate of that family untouched
+  // (and counted, so the caller can report "9 of 11 updated").
+  const setPrimaryLocatorBulk = useCallback(
+    (ids: Set<string>, family: "css" | "xpath") => {
+      let updated = 0;
+      let skipped = 0;
+      setSession((prev) => ({
+        ...prev,
+        elements: prev.elements.map((el) => {
+          if (!ids.has(el.id)) return el;
+          const matches = el.candidates
+            .filter((c) => (family === "css" ? c.type === "css" : c.type.startsWith("xpath")))
+            .sort((a, b) => b.score.total - a.score.total);
+          if (matches.length === 0) {
+            skipped += 1;
+            return el;
+          }
+          updated += 1;
+          return { ...el, primaryLocatorId: matches[0].id };
+        }),
+      }));
+      if (updated > 0) {
+        addToast(
+          skipped > 0
+            ? `Updated primary locator for ${updated} of ${updated + skipped} selected; ${skipped} had no ${family.toUpperCase()} candidate.`
+            : `Updated primary locator for ${updated} element${updated === 1 ? "" : "s"}.`,
+          "success",
+        );
+      } else {
+        addToast(`No selected elements had a ${family.toUpperCase()} candidate.`, "error");
+      }
+    },
+    [addToast],
+  );
+
+  // Bulk copy: one "name: value" line per selected element's current primary locator.
+  const copySelectedLocators = useCallback(
+    async (ids: Set<string>) => {
+      const lines = session.elements
+        .filter((el) => ids.has(el.id))
+        .map((el) => {
+          const primary = el.candidates.find((c) => c.id === el.primaryLocatorId) ?? el.candidates[0] ?? null;
+          return `${el.name}: ${primary?.value ?? "(no candidates)"}`;
+        });
+      if (lines.length === 0) return;
+      await navigator.clipboard.writeText(lines.join("\n"));
+      addToast(`Copied ${lines.length} locator${lines.length === 1 ? "" : "s"} to clipboard.`, "success");
+    },
+    [session.elements, addToast],
+  );
+
   const saveSession = useCallback(async () => {
     await persistSession(session);
     addToast(`Session "${session.name}" saved.`, "success");
@@ -180,8 +254,11 @@ export function useCaptureSession() {
     addElement,
     updateElement,
     renameElement,
+    renameElementsBulk,
     deleteElements,
     setPrimaryLocator,
+    setPrimaryLocatorBulk,
+    copySelectedLocators,
     saveSession,
   };
 }

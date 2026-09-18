@@ -49,4 +49,24 @@ describe("generateCandidates", () => {
     const axes = candidates.filter((c) => c.type === "xpath-axis").map((c) => c.axis);
     expect(axes).toEqual(["self"]);
   });
+
+  it("includes link-text candidates for an <a> with visible text, but not for other tags", () => {
+    const link = generateCandidates(makeSnapshot({ tag: "a", text: "Learn More", innerText: "Learn More" }));
+    expect(link.some((c) => c.type === "xpath-linktext")).toBe(true);
+    expect(link.some((c) => c.type === "xpath-partial-linktext")).toBe(true);
+
+    const button = generateCandidates(loginButtonSnapshot());
+    expect(button.some((c) => c.type === "xpath-linktext")).toBe(false);
+  });
+
+  it("includes a position() candidate when the element shares its tag with siblings", () => {
+    const candidates = generateCandidates(
+      makeSnapshot({
+        tag: "div",
+        tagSiblingCount: 3,
+        ancestorChain: [{ tag: "html", index: 1 }, { tag: "body", index: 1 }, { tag: "div", index: 2 }],
+      }),
+    );
+    expect(candidates.some((c) => c.type === "xpath-position" && c.value === "//div[position()=2]")).toBe(true);
+  });
 });

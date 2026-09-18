@@ -13,6 +13,7 @@ const CONSTANT: Record<SeleniumStrategyKind, string> = {
   name: "NAME",
   className: "CLASS_NAME",
   linkText: "LINK_TEXT",
+  partialLinkText: "PARTIAL_LINK_TEXT",
   css: "CSS_SELECTOR",
   xpath: "XPATH",
 };
