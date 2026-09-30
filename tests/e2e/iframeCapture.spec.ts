@@ -68,4 +68,57 @@ test.describe("capture inside a same-origin iframe", () => {
     expect(consoleErrors, `Console errors:\n${consoleErrors.join("\n")}`).toEqual([]);
     await app.close();
   });
+
+  test("capture still works after the frame's content is reset in place (document.open/write/close, no navigation)", async () => {
+    // Regression guard for the yopmail.com bug: confirmed live on that site that its inbox
+    // iframe's content visibly refreshes with the exact same Document object and zero 'load'
+    // events reaching a listener on the <iframe> element — a document.open()/write()/close()
+    // reset is the standard way a page does that. The HTML spec has that call reuse the same
+    // Document object while discarding its event listeners, which used to leave
+    // webview-preload.cjs's `attachedDocuments` WeakSet permanently (and wrongly) believing the
+    // frame was "already handled," with zero live capture listeners and no way to recover.
+    const app = await electron.launch({ args: [path.join(__dirname, "..", "..")] });
+    const window = await app.firstWindow();
+    const consoleErrors: string[] = [];
+    window.on("console", (msg) => {
+      if (msg.type() === "error") consoleErrors.push(msg.text());
+    });
+    window.on("pageerror", (err) => consoleErrors.push(String(err)));
+
+    await window.waitForSelector("text=Smart Locator Capture Studio");
+    await createSession(window, "In-Place Frame Reset Fixture", FIXTURE_URL);
+    await window.waitForTimeout(500);
+
+    // Capture the original button first, to establish the frame's listeners are live at all.
+    await ctrlClickInGuestFrame(window, "#sameOriginFrame", "#frameButton");
+    await window.waitForSelector("text=Captured Elements (1)", { timeout: 15000 });
+
+    // Reset the frame's content in place: same Document object, no navigation, no 'load' event —
+    // but a brand-new button that didn't exist a moment ago.
+    await window.evaluate(async () => {
+      const webview = document.querySelector("webview") as unknown as {
+        executeJavaScript: (code: string) => Promise<unknown>;
+      };
+      await webview.executeJavaScript(`
+        (function () {
+          var frame = document.querySelector("#sameOriginFrame");
+          var doc = frame.contentDocument;
+          doc.open();
+          doc.write('<!doctype html><html><body><button id="afterReset" data-testid="after-reset-button">After Reset</button></body></html>');
+          doc.close();
+        })();
+      `);
+    });
+    await window.waitForTimeout(300);
+
+    await ctrlClickInGuestFrame(window, "#sameOriginFrame", "#afterReset");
+    await window.waitForSelector("text=Captured Elements (2)", { timeout: 15000 });
+
+    const primaryBadge = window.locator("code", { hasText: "after-reset-button" }).first();
+    await expect(primaryBadge).toBeVisible();
+    await expect(window.getByText(/1 match.*Unique/).first()).toBeVisible();
+
+    expect(consoleErrors, `Console errors:\n${consoleErrors.join("\n")}`).toEqual([]);
+    await app.close();
+  });
 });

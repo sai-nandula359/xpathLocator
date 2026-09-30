@@ -14,6 +14,12 @@ const DESKTOP_DEVICE_ID = "desktop";
 const RESPONSIVE_DEVICE_ID = "responsive";
 const DEFAULT_CUSTOM_SIZE = { width: 1280, height: 800 };
 
+// React's JSX typings for <webview> only accept `allowpopups?: boolean`, and passing `true`
+// doesn't render as a real DOM attribute for this custom element anyway (confirmed at runtime).
+// A plain string does render correctly and is what Electron's own attribute check actually reads
+// — cast once here so the spread onto the element below doesn't need an inline assertion.
+const ADDITIONAL_ATTRS = { allowpopups: "true" } as unknown as { allowpopups?: boolean };
+
 export default function BrowserWorkspace({ api, webviewRef, onWebviewApi }: BrowserWorkspaceProps) {
   const [addressBarValue, setAddressBarValue] = useState(api.session.baseUrl);
   const webviewApi = useWebviewCapture(webviewRef, api);
@@ -49,7 +55,13 @@ export default function BrowserWorkspace({ api, webviewRef, onWebviewApi }: Brow
     if (!webview || defaultUserAgentRef.current) return;
     try {
       const ua = webview.getUserAgent();
-      if (ua) defaultUserAgentRef.current = ua;
+      // Electron's own default UA self-identifies with an " Electron/x.y.z" token appended to an
+      // otherwise-real Chromium UA string. Google and Microsoft (among others) are both known to
+      // detect and block sign-in from user agents that look like an embedded/automated browser —
+      // stripping this is what actually lets Microsoft/Google login flows render at all instead
+      // of refusing with "this browser or app may not be secure." The emulation effect below
+      // picks this sanitized value up as "the default to restore" for ordinary desktop browsing.
+      if (ua) defaultUserAgentRef.current = ua.replace(/\s*Electron\/\S+/, "");
     } catch {
       // Not attached yet — retried on the next url change below.
     }
@@ -283,9 +295,16 @@ export default function BrowserWorkspace({ api, webviewRef, onWebviewApi }: Brow
             src={api.session.baseUrl || "about:blank"}
             preload={window.captureStudio.webviewPreloadPath}
             partition="persist:capture-session"
-            allowpopups
             className={frameSize ? "flex-shrink-0 border border-slate-300 dark:border-slate-700 rounded-lg shadow-lg" : "w-full h-full"}
             style={frameSize ? { width: frameSize.width, height: frameSize.height } : undefined}
+            // React's <webview> typings only accept a boolean for `allowpopups`, but a boolean
+            // `true` never actually reaches the DOM node for this custom element (confirmed at
+            // runtime), and Electron appears to decide whether a guest is allowed to pop up
+            // synchronously when the guest is first created — setting it a tick later (e.g. via a
+            // ref effect, once mounted) was confirmed NOT to take effect retroactively. Forcing an
+            // explicit string through here, present from the very first render, is what actually
+            // works. See ADDITIONAL_ATTRS below.
+            {...ADDITIONAL_ATTRS}
           />
         </div>
         {!api.session.baseUrl && (
