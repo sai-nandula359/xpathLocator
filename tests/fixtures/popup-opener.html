@@ -8,5 +8,11 @@
     <button id="openPopup" onclick="window.open('./popup-target.html', '_blank', 'width=400,height=300')">
       Open Popup
     </button>
+    <button
+      id="openDeferredPopup"
+      onclick="var p = window.open('', 'deferred', 'width=400,height=300'); setTimeout(function () { p.location.href = './popup-target.html'; }, 200);"
+    >
+      Open Popup (URL assigned later)
+    </button>
   </body>
 </html>

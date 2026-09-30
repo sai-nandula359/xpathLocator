@@ -251,9 +251,36 @@ function registerClipboardPermissions() {
 function registerPopupRedirect() {
   app.on("web-contents-created", (_event, contents) => {
     if (contents.getType() !== "webview") return;
+
     contents.setWindowOpenHandler(({ url }) => {
-      contents.loadURL(url);
-      return { action: "deny" };
+      if (url && url !== "about:blank") {
+        contents.loadURL(url);
+        return { action: "deny" };
+      }
+      // Several real SSO/OAuth flows (Microsoft's among them) open a *blank* popup synchronously
+      // — to satisfy the browser's popup-blocker user-gesture requirement — and only assign the
+      // real sign-in URL into it a moment later (`popup.location.href = authUrl`), often after an
+      // async call to fetch a nonce/state param. Denying immediately (as above) makes
+      // window.open() return null to that script, so the later assignment targets nothing and
+      // the flow silently dies — the exact "page goes blank, then nothing happens" symptom.
+      // Allowing it to become a real, hidden window instead gives that follow-up assignment
+      // somewhere real to land; once it actually navigates, redirect the main webview there and
+      // close the throwaway popup, so the visible result still ends up the same as any other
+      // popup — everything in the one browsing surface this app shows and captures from.
+      return { action: "allow" };
+    });
+
+    contents.on("did-create-window", (childWindow) => {
+      childWindow.hide();
+      let redirected = false;
+      const redirectAndClose = (url) => {
+        if (redirected || !url || url === "about:blank") return;
+        redirected = true;
+        contents.loadURL(url);
+        if (!childWindow.isDestroyed()) childWindow.close();
+      };
+      childWindow.webContents.on("will-navigate", (_event, url) => redirectAndClose(url));
+      childWindow.webContents.on("did-navigate", (_event, url) => redirectAndClose(url));
     });
   });
 }

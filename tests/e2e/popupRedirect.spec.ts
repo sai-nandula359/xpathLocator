@@ -65,4 +65,54 @@ test.describe("popup/window.open redirect handling", () => {
     expect(consoleErrors, `Console errors:\n${consoleErrors.join("\n")}`).toEqual([]);
     await app.close();
   });
+
+  // Regression test for the real-world report this was actually caught against: several SSO/OAuth
+  // flows (Microsoft's among them) open a *blank* popup synchronously — to satisfy the popup
+  // blocker's user-gesture requirement — then assign the real sign-in URL into it a moment later
+  // (`popup.location.href = authUrl`), often after an async call. Denying the popup immediately
+  // and loading whatever URL window.open() was called with (as the first test above does) means
+  // loading "about:blank" here — the page visibly goes blank, and since `deny` makes window.open()
+  // return null, the site's later `popup.location.href = ...` assignment throws and the flow just
+  // stops. This is exactly what "clicking Sign in with Microsoft does nothing, page goes blank"
+  // looked like in practice.
+  test("a popup opened blank, with its URL assigned a moment later, still ends up loading in the webview", async () => {
+    const app = await electron.launch({ args: [path.join(__dirname, "..", "..")] });
+    const window = await app.firstWindow();
+    const consoleErrors: string[] = [];
+    window.on("console", (msg) => {
+      if (msg.type() === "error") consoleErrors.push(msg.text());
+    });
+    window.on("pageerror", (err) => consoleErrors.push(String(err)));
+
+    await window.waitForSelector("text=Smart Locator Capture Studio");
+    await createSession(window, "Deferred Popup Redirect Fixture", OPENER_URL);
+
+    const windowCountBefore = app.windows().length;
+
+    await window.evaluate(async () => {
+      const webview = document.querySelector("webview") as unknown as {
+        executeJavaScript: (code: string) => Promise<unknown>;
+      };
+      await webview.executeJavaScript(`
+        (function () {
+          var btn = document.querySelector("#openDeferredPopup");
+          btn.click();
+        })();
+      `);
+    });
+
+    await window.waitForFunction(
+      (expectedUrl) => {
+        const wv = document.querySelector("webview") as unknown as { getURL?: () => string } | null;
+        return !!wv?.getURL && wv.getURL() === expectedUrl;
+      },
+      TARGET_URL,
+      { timeout: 15000 },
+    );
+
+    expect(app.windows()).toHaveLength(windowCountBefore);
+
+    expect(consoleErrors, `Console errors:\n${consoleErrors.join("\n")}`).toEqual([]);
+    await app.close();
+  });
 });
