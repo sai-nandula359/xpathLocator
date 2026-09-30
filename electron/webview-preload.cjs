@@ -588,6 +588,12 @@ function attachCaptureListeners(doc, frameLabel) {
 
 const MAX_FRAME_DEPTH = 8;
 
+// Frame *elements* we've already wired a 'load' listener onto — kept separate from
+// attachedDocuments (which tracks Document objects) so that calling setupFrame again on an
+// already-known frame (from the attribute-mutation branch below) never registers a second 'load'
+// listener, which would otherwise accumulate duplicate capture listeners over time.
+const setupFrames = new WeakSet();
+
 // Wires up one <iframe> element for capture. Tries immediately (covers a frame that's already
 // finished loading by the time this runs) AND again on the frame's own 'load' event — this is
 // the fix for a real bug: DOMContentLoaded on the *outer* page does not guarantee any given
@@ -602,9 +608,14 @@ const MAX_FRAME_DEPTH = 8;
 // document's initial pass.
 function setupFrame(frame, depth) {
   if (depth > MAX_FRAME_DEPTH) return;
-  const label = frame.getAttribute("src") || frame.getAttribute("name") || "iframe";
 
-  const tryAttach = () => {
+  const attach = (forceReattach) => {
+    // Recomputed on every call (not once, outside) so a locator captured after this frame's own
+    // `src` has since changed records the frame's *current* src, not whatever it was when this
+    // frame was first discovered — validator.ts's rootDocResolverExpr re-resolves a frame at
+    // validation time by exact src match, so a stale label here would make live re-validation
+    // silently resolve against the wrong (top-level) document.
+    const label = frame.getAttribute("src") || frame.getAttribute("name") || "iframe";
     let innerDoc;
     try {
       innerDoc = frame.contentDocument;
@@ -612,24 +623,55 @@ function setupFrame(frame, depth) {
       reportCrossOriginFrame(label);
       return;
     }
-    if (!innerDoc || !innerDoc.body) return; // not navigated yet — the frame's own 'load' will retry
+    // A genuinely cross-origin frame's contentDocument doesn't throw — it's just null. Only a
+    // sandboxed-without-allow-same-origin frame (or similar) throws; both are reported the same
+    // way here, since neither is inspectable from this side either way.
+    if (innerDoc === null) {
+      reportCrossOriginFrame(label);
+      return;
+    }
+    if (!innerDoc.body) return; // not navigated yet — the frame's own 'load' will retry
+    if (forceReattach) attachedDocuments.delete(innerDoc);
     attachCaptureListeners(innerDoc, label);
     watchForFrames(innerDoc, depth + 1);
   };
 
-  tryAttach();
-  frame.addEventListener("load", tryAttach);
+  attach(false);
+
+  if (!setupFrames.has(frame)) {
+    setupFrames.add(frame);
+    // A 'load' firing on a frame we've already set up once is itself a strong, specific signal
+    // its document was reset — either a real navigation (a brand-new Document object, handled
+    // fine either way) or an in-place reset via document.open()/write()/close(), a pattern some
+    // sites use to refresh a panel's content without a real network navigation (confirmed live on
+    // yopmail.com's own inbox: its content visibly refreshes with the exact same Document object
+    // and zero 'load' events reaching a plain listener on the frame — so whatever mechanism a
+    // given site uses, treating any 'load' we DO get as "start over" is the safe, general fix).
+    // The HTML spec's document.open() reuses the same Document object but discards its event
+    // listeners — the attachedDocuments WeakSet that makes the very first attach idempotent would
+    // otherwise treat that reused object as "already handled" forever, leaving it with zero live
+    // capture listeners and no path to ever recover. Forcing reattachment here is safe: a
+    // genuinely new document was never in that set to begin with, so this only ever restores
+    // listeners that are missing — it never duplicates ones still present.
+    frame.addEventListener("load", () => attach(true));
+  }
 }
 
 // Finds every <iframe> currently inside `doc` and wires each one up, then keeps watching for
 // ones added later — a route change in a client-rendered app, a lazy-loaded widget, a frame
 // swapped in after some user action — since those never existed at the point this ran the first
-// time and would otherwise never get capture support at all.
+// time and would otherwise never get capture support at all. Also watches each known frame's own
+// `src` attribute: reassigning it (`iframe.src = newUrl`) without removing/re-inserting the
+// element produces no childList mutation at all, so that path needs its own observer config.
 function watchForFrames(doc, depth) {
   for (const frame of Array.from(doc.querySelectorAll("iframe"))) setupFrame(frame, depth);
 
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
+      if (mutation.type === "attributes") {
+        if (mutation.target.tagName === "IFRAME") setupFrame(mutation.target, depth);
+        continue;
+      }
       for (const node of mutation.addedNodes) {
         if (node.nodeType !== 1) continue;
         if (node.tagName === "IFRAME") setupFrame(node, depth);
@@ -639,7 +681,12 @@ function watchForFrames(doc, depth) {
       }
     }
   });
-  observer.observe(doc.documentElement || doc, { childList: true, subtree: true });
+  observer.observe(doc.documentElement || doc, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["src"],
+  });
 }
 
 function init() {

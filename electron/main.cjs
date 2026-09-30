@@ -241,8 +241,26 @@ function registerClipboardPermissions() {
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => isClipboardPermission(permission));
 }
 
+// Many login/SSO flows (Microsoft, Google, ...) open their sign-in step as a popup
+// (window.open()/target="_blank") rather than a same-window redirect. The <webview> has
+// `allowpopups` set but nothing was handling that request — Electron's documented default for an
+// unhandled popup on a guest webview is to open it as a bare, separate BrowserWindow outside this
+// app's UI, partition, and preload entirely. From the user's perspective that reads as "nothing
+// opened." Denying the popup and loading its URL into the same, visible webview instead keeps
+// every login flow inside the one browsing surface this app actually shows and captures from.
+function registerPopupRedirect() {
+  app.on("web-contents-created", (_event, contents) => {
+    if (contents.getType() !== "webview") return;
+    contents.setWindowOpenHandler(({ url }) => {
+      contents.loadURL(url);
+      return { action: "deny" };
+    });
+  });
+}
+
 app.whenReady().then(() => {
   registerClipboardPermissions();
+  registerPopupRedirect();
   createWindow();
 
   app.on("activate", () => {
