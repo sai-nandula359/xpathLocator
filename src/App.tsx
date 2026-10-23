@@ -145,8 +145,6 @@ export default function App() {
             canGoForward: false,
             duplicatePrompt: null,
             resolveDuplicate: () => {},
-            frameNotice: null,
-            dismissFrameNotice: () => {},
             pageError: null,
             dismissPageError: () => {},
             navigateTo: () => {},

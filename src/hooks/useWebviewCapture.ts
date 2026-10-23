@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { captureElement, type CaptureOutcome } from "@/session/captureElement";
+import { frameAwareTarget, webviewTargetFor } from "@/session/frameTarget";
 import type { CaptureSessionApi } from "@/hooks/useCaptureSession";
 import type { ElementSnapshot } from "@/types";
 
@@ -51,7 +52,6 @@ export function useWebviewCapture(webviewRef: RefObject<ElectronWebviewElement |
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const [duplicatePrompt, setDuplicatePrompt] = useState<CaptureOutcome | null>(null);
-  const [frameNotice, setFrameNotice] = useState<string[] | null>(null);
   const [pageError, setPageError] = useState<PageError | null>(null);
 
   // `api` is a fresh object every render (useCaptureSession doesn't memoize its return value),
@@ -79,6 +79,8 @@ export function useWebviewCapture(webviewRef: RefObject<ElectronWebviewElement |
       } catch {
         // not ready yet — dom-ready's own sync call will cover it
       }
+      // Subframes (cross-origin iframes) and popups never receive the webview.send() above.
+      void window.captureStudio.frames.setCaptureMode(enabled);
     },
     [webviewRef],
   );
@@ -89,13 +91,16 @@ export function useWebviewCapture(webviewRef: RefObject<ElectronWebviewElement |
     pushCaptureMode(captureModeEnabled);
   }, [captureModeEnabled, pushCaptureMode]);
 
+  // `target` is where the element was captured — the main webview by default, or a popup window
+  // (a login/SSO step) whose live validation has to run against that popup's own DOM instead.
   const handleCaptured = useCallback(
-    async (snapshot: ElementSnapshot) => {
+    async (snapshot: ElementSnapshot, target?: ScriptTarget) => {
       const webview = webviewRef.current;
-      if (!webview) return;
       const currentApi = apiRef.current;
       try {
-        const outcome = await captureElement(webview, snapshot, currentApi.session);
+        const scriptTarget = target ?? (webview ? webviewTargetFor(webview, snapshot) : null);
+        if (!scriptTarget) return;
+        const outcome = await captureElement(scriptTarget, snapshot, currentApi.session);
         if (outcome.duplicateOf) {
           setDuplicatePrompt(outcome);
         } else {
@@ -140,9 +145,6 @@ export function useWebviewCapture(webviewRef: RefObject<ElectronWebviewElement |
         setCaptureModeEnabled(false);
       } else if (e.channel === "toggle-capture-mode") {
         setCaptureModeEnabled((v) => !v);
-      } else if (e.channel === "frame-notice") {
-        const payload = e.args[0] as { crossOriginFrames: string[] };
-        if (payload.crossOriginFrames.length > 0) setFrameNotice(payload.crossOriginFrames);
       } else if (e.channel === "navigated") {
         const payload = e.args[0] as { url: string; title: string };
         setUrl(payload.url);
@@ -221,6 +223,28 @@ export function useWebviewCapture(webviewRef: RefObject<ElectronWebviewElement |
     };
   }, [webviewRef, handleCaptured, pushCaptureMode]);
 
+  // Same messages as the webview's ipc-message channel above, but from popup windows. A popup's
+  // own "navigated" is deliberately ignored: the address bar and session URL track the main
+  // webview, which stays on the original page while the popup is open.
+  useEffect(
+    () =>
+      window.captureStudio.popups.onMessage(({ popupId, channel, payload }) => {
+        if (channel === "element-captured") {
+          const snapshot = payload as ElementSnapshot;
+          const popupTarget: ScriptTarget = {
+            executeJavaScript: (code) => window.captureStudio.popups.executeJavaScript(popupId, code),
+          };
+          // A popup's id is its webContents id, which is what frame-targeted execution needs.
+          void handleCaptured(snapshot, frameAwareTarget(popupTarget, popupId, snapshot));
+        } else if (channel === "exit-capture-mode") {
+          setCaptureModeEnabled(false);
+        } else if (channel === "toggle-capture-mode") {
+          setCaptureModeEnabled((v) => !v);
+        }
+      }),
+    [handleCaptured],
+  );
+
   const navigateTo = useCallback(
     (targetUrl: string) => {
       const webview = webviewRef.current;
@@ -242,8 +266,6 @@ export function useWebviewCapture(webviewRef: RefObject<ElectronWebviewElement |
     canGoForward,
     duplicatePrompt,
     resolveDuplicate,
-    frameNotice,
-    dismissFrameNotice: () => setFrameNotice(null),
     pageError,
     dismissPageError: () => setPageError(null),
     navigateTo,

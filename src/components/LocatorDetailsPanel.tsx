@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronRight, Copy, RefreshCw, Star, Wand2, Wrench } from "lucide-react";
 import { useState } from "react";
 import type { CaptureSessionApi } from "@/hooks/useCaptureSession";
+import { webviewTargetFor } from "@/session/frameTarget";
 import { validateCandidate } from "@/session/liveValidate";
 import { repairElement } from "@/session/repairLocator";
 import { classifyCandidates, scoreCandidate } from "@/engine/scorer";
@@ -90,7 +91,7 @@ export default function LocatorDetailsPanel({ api, webviewRef }: LocatorDetailsP
     if (!webview) return;
     setRetesting(candidate.id);
     try {
-      const validation = await validateCandidate(webview, candidate, el.snapshot.frameSrc);
+      const validation = await validateCandidate(webviewTargetFor(webview, el.snapshot), candidate, el.snapshot.frameSrc);
       const updated: LocatorCandidate = { ...candidate, validation, score: scoreCandidate(candidate, validation) };
       const nextCandidates = el.candidates.map((c) => (c.id === candidate.id ? updated : c));
       api.updateElement(el.id, { ...el, candidates: nextCandidates });
@@ -107,7 +108,7 @@ export default function LocatorDetailsPanel({ api, webviewRef }: LocatorDetailsP
     if (!webview) return;
     setRepairing(true);
     try {
-      const outcome = await repairElement(webview, el);
+      const outcome = await repairElement(webviewTargetFor(webview, el.snapshot), el);
       api.updateElement(el.id, {
         ...el,
         candidates: outcome.candidates,

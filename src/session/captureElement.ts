@@ -38,7 +38,7 @@ const ZERO_SCORE = {
  * so it only fires for the case visibility-aware uniqueness can't already resolve — genuinely
  * duplicated *visible* elements — rather than cluttering every capture with an extra candidate. */
 async function tryBuildIndexedCandidate(
-  webview: ElectronWebviewElement,
+  webview: ScriptTarget,
   candidates: LocatorCandidate[],
   settings: StabilitySettings,
   frameSrc: string | null,
@@ -70,7 +70,7 @@ async function tryBuildIndexedCandidate(
 }
 
 export async function captureElement(
-  webview: ElectronWebviewElement,
+  webview: ScriptTarget,
   snapshot: ElementSnapshot,
   session: CaptureSession,
   settings: StabilitySettings = DEFAULT_STABILITY_SETTINGS,

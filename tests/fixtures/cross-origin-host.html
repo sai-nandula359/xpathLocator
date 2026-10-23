@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Cross-origin host fixture</title>
+  </head>
+  <body>
+    <h1 id="hostHeading">Host page</h1>
+    <iframe id="crossOriginFrame" title="Cross-origin frame" width="400" height="200"></iframe>
+    <script>
+      // The frame's origin comes from the query string so the test can point it at a different
+      // host (localhost vs 127.0.0.1) on the same server — a genuinely cross-origin frame.
+      var frameOrigin = new URLSearchParams(location.search).get("frameOrigin");
+      document.getElementById("crossOriginFrame").src = frameOrigin + "/cross-origin-frame.html";
+    </script>
+  </body>
+</html>

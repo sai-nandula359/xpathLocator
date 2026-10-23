@@ -28,7 +28,7 @@ export interface RepairOutcome {
 }
 
 export async function repairElement(
-  webview: ElectronWebviewElement,
+  webview: ScriptTarget,
   element: CapturedElement,
   settings: StabilitySettings = DEFAULT_STABILITY_SETTINGS,
 ): Promise<RepairOutcome> {

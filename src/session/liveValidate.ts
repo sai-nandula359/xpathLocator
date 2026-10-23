@@ -11,7 +11,7 @@ import {
 import type { LocatorCandidate, ValidationResult } from "@/types";
 
 export async function validateCandidate(
-  webview: ElectronWebviewElement,
+  webview: ScriptTarget,
   candidate: LocatorCandidate,
   frameSrc?: string | null,
 ): Promise<ValidationResult> {
@@ -32,7 +32,7 @@ export async function validateCandidate(
  * against the same webview can interleave unpredictably, and a handful of candidates per
  * element is cheap enough sequentially to stay under section 73's targets. */
 export async function validateAll(
-  webview: ElectronWebviewElement,
+  webview: ScriptTarget,
   candidates: LocatorCandidate[],
   frameSrc?: string | null,
 ): Promise<void> {
@@ -46,7 +46,7 @@ export async function validateAll(
  * `groundTruth` xpath-absolute value to re-identify which match is "ours." Returns null when
  * the element can't be re-located or isn't among the candidate's matches at all. */
 export async function findMatchIndex(
-  webview: ElectronWebviewElement,
+  webview: ScriptTarget,
   candidate: LocatorCandidate,
   groundTruth: string,
   frameSrc?: string | null,
