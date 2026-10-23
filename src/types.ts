@@ -189,6 +189,12 @@ export interface ElementSnapshot {
    * happens. Only tracks one level of nesting (matches what capture itself records); a locator
    * captured inside a frame-within-a-frame isn't live-validatable today. */
   frameSrc: string | null;
+  /** The URL of the cross-origin iframe this element was captured in — null for the top-level
+   * document and for same-origin frames (frameSrc covers those). No script in the top document
+   * can reach into a cross-origin frame, so live validation runs directly inside it instead, found
+   * by this URL — see session/frameTarget.ts. Optional only so sessions saved before this field
+   * existed still load. When set, frameSrc (if any) is relative to *this* frame's document. */
+  frameUrl?: string | null;
   /** The top-level page's rendered viewport size at capture time (`window.innerWidth/Height`) —
    * reflects whatever device/resolution emulation (see src/devicePresets.ts) was active, so a
    * locator captured only inside a mobile layout can be told apart from one captured at desktop

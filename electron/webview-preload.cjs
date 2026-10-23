@@ -8,11 +8,42 @@
  *  - hover highlight overlay
  *  - Ctrl+Click capture, without disturbing normal clicks
  *  - never read the value of a password/sensitive-looking field
- *  - best-effort same-origin iframe support; a one-time notice (not a silent failure) for
- *    cross-origin iframes this script structurally cannot see inside
+ *  - iframe support: same-origin frames are reached from here via contentDocument; cross-origin
+ *    ones run their own copy of this script (electron/main.cjs enables nodeIntegrationInSubFrames
+ *    for exactly that) and capture for themselves
  */
 
 const { ipcRenderer } = require("electron");
+
+// This same script also runs inside login/SSO popups, which electron/main.cjs opens as real child
+// windows rather than in the <webview> — there's no host there for sendToHost() to reach, so
+// popup messages go through the main process instead, which relays them to the app window.
+const isPopupWindow = ipcRenderer.sendSync("guest:is-popup-window");
+
+function sendToApp(channel, payload) {
+  if (isPopupWindow) ipcRenderer.send("popup:message", channel, payload);
+  else ipcRenderer.sendToHost(channel, payload);
+}
+
+// This script runs in every frame of the page, not just the top one. A frame whose parent can
+// reach its document (same-origin) is already handled from the parent's own copy of this script
+// via contentDocument — see setupFrame() below — so it stays out of the way to avoid capturing
+// everything twice. Only the top frame and genuinely cross-origin frames (whose parent the
+// same-origin policy locks out) do their own capture.
+function isHandledByParentFrame() {
+  if (window === window.top) return false;
+  try {
+    return !!window.parent.document;
+  } catch {
+    return false;
+  }
+}
+
+// Set (in init) when running inside a cross-origin frame. Captures from here record the frame's
+// own URL (read at capture time — an SPA inside the frame can change it without reloading), which
+// the app uses to run live validation inside this exact frame (see "frames:execute-javascript" in
+// electron/main.cjs) — the top document's scripts can't reach in here.
+let isCrossOriginFrame = false;
 
 const HIGHLIGHT_ID = "__slcs_highlight_overlay__";
 const SENSITIVE_NAME_RE = /card|credit|cvv|cvc|ssn|social.?security|passport|secret|token/i;
@@ -497,13 +528,20 @@ function buildSnapshot(doc, el, frameSrc) {
     // Human-readable — the frame suffix is just for display in the UI (Locator Details' page-url
     // line). frameSrc below is the structured form the live-validation pipeline actually uses to
     // find the right <iframe> to query inside.
-    pageUrl: frameSrc ? `${doc.location.href} (frame: ${frameSrc})` : doc.location.href,
+    pageUrl: [
+      doc.location.href,
+      isCrossOriginFrame && doc === document ? "(cross-origin frame)" : null,
+      frameSrc ? `(frame: ${frameSrc})` : null,
+    ]
+      .filter(Boolean)
+      .join(" "),
     pageTitle: doc.title,
     labelAnchor: resolveLabelAnchor(doc, el, attrs),
     landmarkAncestor,
     siblingAnchors: resolveSiblingAnchors(doc, el),
     stateAnchor,
     frameSrc: frameSrc || null,
+    frameUrl: isCrossOriginFrame ? window.location.href : null,
     // The top-level page's own rendered viewport (not the iframe's, when capturing inside one) —
     // this is exactly what device emulation resizes, so it doubles as a record of which
     // device/resolution (if any) was active at capture time.
@@ -512,21 +550,10 @@ function buildSnapshot(doc, el, frameSrc) {
   };
 }
 
-// section 55 — capture mode is a toggle (Ctrl+Shift+C / Esc), not always-on; the host pushes
-// its current value down after every navigation, since this whole script re-runs then.
+// section 55 — capture mode is a toggle (Ctrl+Shift+C / Esc), not always-on. Read from the main
+// process on startup (init below), since this whole script re-runs on every navigation and a
+// subframe or popup never gets the host's own post-navigation push.
 let captureModeEnabled = true;
-
-// Cross-origin frames found anywhere on the page, accumulated for the life of this navigation
-// and re-sent in full each time a new one turns up — the host's own handler
-// (useWebviewCapture.ts's onIpc) replaces its list wholesale on every "frame-notice" rather than
-// merging, so this side has to keep the running total instead.
-const reportedCrossOriginFrames = new Set();
-
-function reportCrossOriginFrame(label) {
-  if (reportedCrossOriginFrames.has(label)) return;
-  reportedCrossOriginFrames.add(label);
-  ipcRenderer.sendToHost("frame-notice", { crossOriginFrames: Array.from(reportedCrossOriginFrames) });
-}
 
 // Documents already wired up — attachCaptureListeners can be asked to attach the same document
 // twice (setupFrame below tries once immediately *and* again on the frame's 'load' event, since
@@ -567,7 +594,7 @@ function attachCaptureListeners(doc, frameLabel) {
       const target = event.composedPath ? event.composedPath()[0] : event.target;
       if (!(target instanceof doc.defaultView.Element)) return;
       const snapshot = buildSnapshot(doc, target, frameLabel);
-      ipcRenderer.sendToHost("element-captured", snapshot);
+      sendToApp("element-captured", snapshot);
     },
     true,
   );
@@ -576,10 +603,10 @@ function attachCaptureListeners(doc, frameLabel) {
     "keydown",
     (event) => {
       if (event.key === "Escape" && captureModeEnabled) {
-        ipcRenderer.sendToHost("exit-capture-mode");
+        sendToApp("exit-capture-mode");
       } else if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "c") {
         event.preventDefault();
-        ipcRenderer.sendToHost("toggle-capture-mode");
+        sendToApp("toggle-capture-mode");
       }
     },
     true,
@@ -603,9 +630,8 @@ const setupFrames = new WeakSet();
 // dispatches a perfectly real click — confirmed live, the event fires and even
 // document.querySelector resolves the element correctly — but nothing is listening on the
 // document that's actually displayed, so it silently does nothing, forever, for that frame.
-// Cross-origin content still can't be inspected (the browser enforces that, not this tool) but
-// is now reported via frame-notice from wherever it's first discovered, not just from the top
-// document's initial pass.
+// A cross-origin frame is skipped here: its contentDocument is off-limits to this side, and it
+// runs its own copy of this script instead (see isHandledByParentFrame above).
 function setupFrame(frame, depth) {
   if (depth > MAX_FRAME_DEPTH) return;
 
@@ -620,17 +646,10 @@ function setupFrame(frame, depth) {
     try {
       innerDoc = frame.contentDocument;
     } catch {
-      reportCrossOriginFrame(label);
-      return;
+      return; // e.g. sandboxed without allow-same-origin — handles its own capture
     }
-    // A genuinely cross-origin frame's contentDocument doesn't throw — it's just null. Only a
-    // sandboxed-without-allow-same-origin frame (or similar) throws; both are reported the same
-    // way here, since neither is inspectable from this side either way.
-    if (innerDoc === null) {
-      reportCrossOriginFrame(label);
-      return;
-    }
-    if (!innerDoc.body) return; // not navigated yet — the frame's own 'load' will retry
+    // A cross-origin frame's contentDocument doesn't throw — it's just null.
+    if (!innerDoc || !innerDoc.body) return; // cross-origin, or not navigated yet ('load' retries)
     if (forceReattach) attachedDocuments.delete(innerDoc);
     attachCaptureListeners(innerDoc, label);
     watchForFrames(innerDoc, depth + 1);
@@ -690,13 +709,19 @@ function watchForFrames(doc, depth) {
 }
 
 function init() {
+  if (isHandledByParentFrame()) return;
+  const isTopFrame = window === window.top;
+  isCrossOriginFrame = !isTopFrame;
+
+  captureModeEnabled = ipcRenderer.sendSync("guest:get-capture-mode");
   attachCaptureListeners(document, null);
   watchForFrames(document, 1);
   ipcRenderer.on("set-capture-mode", (_event, enabled) => {
     captureModeEnabled = enabled;
     if (!enabled) hideHighlight(document);
   });
-  ipcRenderer.sendToHost("navigated", { url: document.location.href, title: document.title });
+  // Only the top frame's URL belongs in the app's address bar.
+  if (isTopFrame) sendToApp("navigated", { url: document.location.href, title: document.title });
 }
 
 if (document.readyState === "loading") {

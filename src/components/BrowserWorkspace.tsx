@@ -247,19 +247,6 @@ export default function BrowserWorkspace({ api, webviewRef, onWebviewApi }: Brow
         </div>
       </div>
 
-      {webviewApi.frameNotice && (
-        <div className="flex items-center justify-between gap-3 px-3 py-1.5 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900 text-[11px] text-amber-700 dark:text-amber-300">
-          <span>
-            {webviewApi.frameNotice.length} cross-origin iframe(s) on this page can&apos;t be inspected (browser
-            same-origin policy) — elements inside {webviewApi.frameNotice.length === 1 ? "it aren't" : "them aren't"}{" "}
-            capturable in this release.
-          </span>
-          <button onClick={webviewApi.dismissFrameNotice} className="flex-shrink-0">
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
       {webviewApi.pageError && (
         <div
           data-testid="page-error-banner"

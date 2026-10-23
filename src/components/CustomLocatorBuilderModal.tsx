@@ -15,6 +15,7 @@ import { isDynamicAttributeName, isDynamicValue } from "@/engine/dynamicAttribut
 import { scoreCandidate } from "@/engine/scorer";
 import { generateAbsolute } from "@/engine/xpath/absolute";
 import { nextId } from "@/engine/xpath/util";
+import { webviewTargetFor } from "@/session/frameTarget";
 import { findMatchIndex, validateCandidate } from "@/session/liveValidate";
 import type { CapturedElement, LocatorCandidate, ValidationResult } from "@/types";
 
@@ -84,11 +85,12 @@ export default function CustomLocatorBuilderModal({ element, webviewRef, onClose
       return;
     }
 
-    const webview = webviewRef.current;
-    if (!webview) {
+    const webviewEl = webviewRef.current;
+    if (!webviewEl) {
       setPreview({ value: baseValue, error: "No live page to validate against." });
       return;
     }
+    const webview = webviewTargetFor(webviewEl, element.snapshot);
 
     let cancelled = false;
     const timer = setTimeout(() => {

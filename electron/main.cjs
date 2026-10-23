@@ -211,6 +211,16 @@ function createWindow() {
     },
   });
 
+  // Runs webview-preload.cjs in every frame of the guest page, not just the top one. Same-origin
+  // iframes were already capturable from the top frame's script (via contentDocument), but a
+  // cross-origin one — a Microsoft/Google sign-in frame, a payment widget, an embedded app — is
+  // off-limits to it by the same-origin policy. With its own copy of the script running inside,
+  // that frame handles its own capture. Despite the name this grants no Node.js access: the guest
+  // stays sandboxed with nodeIntegration off; it only controls where the preload runs.
+  win.webContents.on("will-attach-webview", (_event, webPreferences) => {
+    webPreferences.nodeIntegrationInSubFrames = true;
+  });
+
   if (isDev) {
     win.loadURL("http://localhost:5173");
     // Not auto-opening DevTools here: a *detached* DevTools window reliably steals OS-level
@@ -241,53 +251,110 @@ function registerClipboardPermissions() {
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => isClipboardPermission(permission));
 }
 
-// Many login/SSO flows (Microsoft, Google, ...) open their sign-in step as a popup
-// (window.open()/target="_blank") rather than a same-window redirect. The <webview> has
-// `allowpopups` set but nothing was handling that request — Electron's documented default for an
-// unhandled popup on a guest webview is to open it as a bare, separate BrowserWindow outside this
-// app's UI, partition, and preload entirely. From the user's perspective that reads as "nothing
-// opened." Denying the popup and loading its URL into the same, visible webview instead keeps
-// every login flow inside the one browsing surface this app actually shows and captures from.
-function registerPopupRedirect() {
+// Many login/SSO flows (Microsoft/MSAL, Google, ...) open their sign-in step as a popup
+// (window.open()/target="_blank") and depend on the *opener* page staying alive while it's open:
+// MSAL's popup flow keeps polling `popup.location` from the original page and only completes —
+// reading the auth response and closing the popup itself — once the popup lands back on the
+// app's redirect URI. Loading the popup's URL into the main webview instead (an earlier version
+// of this) replaces that opener page, so nothing is left to finish the handshake and the login
+// never completes. Popups therefore open as real child windows — parented to the app window,
+// sharing the webview's partition (cookies/session) and running webview-preload.cjs, so Ctrl+Click
+// capture works inside them too, with captures relayed back to the app via the popup:* channels
+// below — while the original page in the webview stays exactly where it was.
+const WEBVIEW_PARTITION = "persist:capture-session"; // must match BrowserWorkspace.tsx's <webview>
+
+
+// Last value the renderer pushed via capture-mode:set. webview-preload.cjs reads it on startup
+// (guest:get-capture-mode) in every frame and popup it runs in — the renderer's own
+// webview.send() only ever reaches the webview's top frame, never a subframe or a popup.
+let captureMode = true;
+
+function appWindowFor(contents) {
+  // A webview guest's host is the app window's own webContents; a popup's (any depth) is its
+  // parent window, which openPopupsAsChildWindows() always sets to that same app window.
+  const host = contents.hostWebContents ?? BrowserWindow.fromWebContents(contents)?.getParentWindow()?.webContents;
+  return host ? BrowserWindow.fromWebContents(host) : null;
+}
+
+function handlePopupsFrom(contents) {
+  contents.setWindowOpenHandler(() => {
+    const parent = appWindowFor(contents);
+    return {
+      action: "allow",
+      overrideBrowserWindowOptions: {
+        parent: parent ?? undefined,
+        autoHideMenuBar: true,
+        webPreferences: {
+          preload: path.join(__dirname, "webview-preload.cjs"),
+          partition: WEBVIEW_PARTITION,
+          contextIsolation: true,
+          nodeIntegration: false,
+          nodeIntegrationInSubFrames: true, // see the will-attach-webview comment in createWindow()
+          sandbox: true,
+        },
+      },
+    };
+  });
+
+  // A popup opening its own popup (a "pick an account" step, say) gets the same treatment.
+  contents.on("did-create-window", (childWindow) => handlePopupsFrom(childWindow.webContents));
+}
+
+function openPopupsAsChildWindows() {
   app.on("web-contents-created", (_event, contents) => {
-    if (contents.getType() !== "webview") return;
-
-    contents.setWindowOpenHandler(({ url }) => {
-      if (url && url !== "about:blank") {
-        contents.loadURL(url);
-        return { action: "deny" };
-      }
-      // Several real SSO/OAuth flows (Microsoft's among them) open a *blank* popup synchronously
-      // — to satisfy the browser's popup-blocker user-gesture requirement — and only assign the
-      // real sign-in URL into it a moment later (`popup.location.href = authUrl`), often after an
-      // async call to fetch a nonce/state param. Denying immediately (as above) makes
-      // window.open() return null to that script, so the later assignment targets nothing and
-      // the flow silently dies — the exact "page goes blank, then nothing happens" symptom.
-      // Allowing it to become a real, hidden window instead gives that follow-up assignment
-      // somewhere real to land; once it actually navigates, redirect the main webview there and
-      // close the throwaway popup, so the visible result still ends up the same as any other
-      // popup — everything in the one browsing surface this app shows and captures from.
-      return { action: "allow" };
-    });
-
-    contents.on("did-create-window", (childWindow) => {
-      childWindow.hide();
-      let redirected = false;
-      const redirectAndClose = (url) => {
-        if (redirected || !url || url === "about:blank") return;
-        redirected = true;
-        contents.loadURL(url);
-        if (!childWindow.isDestroyed()) childWindow.close();
-      };
-      childWindow.webContents.on("will-navigate", (_event, url) => redirectAndClose(url));
-      childWindow.webContents.on("did-navigate", (_event, url) => redirectAndClose(url));
-    });
+    if (contents.getType() === "webview") handlePopupsFrom(contents);
   });
 }
 
+// webview-preload.cjs can't use sendToHost() inside a popup — there's no <webview> host there —
+// so it asks once which kind of page it's running in. The app window's own page never loads that
+// preload, so any "window"-type sender here is a popup.
+ipcMain.on("guest:is-popup-window", (event) => {
+  event.returnValue = event.sender.getType() === "window";
+});
+
+ipcMain.on("popup:message", (event, channel, payload) => {
+  const appWindow = appWindowFor(event.sender);
+  if (!appWindow || appWindow.isDestroyed()) return;
+  appWindow.webContents.send("popup:message", { popupId: event.sender.id, channel, payload });
+});
+
+ipcMain.on("guest:get-capture-mode", (event) => {
+  event.returnValue = captureMode;
+});
+
+ipcMain.handle("capture-mode:set", (_event, enabled) => {
+  captureMode = enabled;
+  for (const wc of webContents.getAllWebContents()) {
+    const isGuest = wc.getType() === "webview" || !!BrowserWindow.fromWebContents(wc)?.getParentWindow();
+    if (!isGuest || wc.isDestroyed()) continue;
+    for (const frame of wc.mainFrame.framesInSubtree) frame.send("set-capture-mode", enabled);
+  }
+});
+
+// Live validation for an element captured inside a popup has to run against *that* popup's DOM,
+// not the main webview's — the renderer can't reach a popup's webContents directly.
+ipcMain.handle("popups:execute-javascript", async (_event, { popupId, code }) => {
+  const wc = webContents.fromId(popupId);
+  if (!wc || wc.isDestroyed()) throw new Error("The popup window has been closed.");
+  return wc.executeJavaScript(code);
+});
+
+// Same idea for an element captured inside a cross-origin iframe: neither webview.executeJavaScript()
+// nor a script running in the top document can reach into it (same-origin policy), but the main
+// process can run a script directly in that frame. Frames are found by their current URL rather
+// than a frame id, so re-validating after a reload (which recreates every frame) still works.
+ipcMain.handle("frames:execute-javascript", async (_event, { webContentsId, frameUrl, code }) => {
+  const wc = webContents.fromId(webContentsId);
+  if (!wc || wc.isDestroyed()) throw new Error("The page this element was captured on has been closed.");
+  const frame = wc.mainFrame.framesInSubtree.find((f) => f !== wc.mainFrame && f.url === frameUrl);
+  if (!frame) throw new Error(`The frame this element was captured in (${frameUrl}) isn't on the current page.`);
+  return frame.executeJavaScript(code);
+});
+
 app.whenReady().then(() => {
   registerClipboardPermissions();
-  registerPopupRedirect();
+  openPopupsAsChildWindows();
   createWindow();
 
   app.on("activate", () => {

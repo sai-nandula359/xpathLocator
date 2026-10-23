@@ -77,6 +77,24 @@ declare global {
       enableEmulation: (webContentsId: number, parameters: DeviceEmulationParameters) => Promise<{ ok: boolean }>;
       disableEmulation: (webContentsId: number) => Promise<{ ok: boolean }>;
     };
+    /** Login/SSO popups opened from the webview, which run as real child windows (see
+     * electron/main.cjs) and relay their webview-preload.cjs messages through here. */
+    popups: {
+      onMessage: (callback: (message: PopupMessage) => void) => () => void;
+      executeJavaScript: (popupId: number, code: string) => Promise<unknown>;
+    };
+    /** Every frame of the webview and its popups, including cross-origin iframes the renderer
+     * can't reach through the <webview> itself. */
+    frames: {
+      setCaptureMode: (enabled: boolean) => Promise<void>;
+      executeJavaScript: (webContentsId: number, frameUrl: string, code: string) => Promise<unknown>;
+    };
+  }
+
+  interface PopupMessage {
+    popupId: number;
+    channel: string;
+    payload: unknown;
   }
 
   interface Window {
@@ -108,4 +126,8 @@ declare global {
   // Alias used throughout the app's own code so it reads as "the Electron webview element"
   // rather than the DOM lib's oddly-cased native name.
   type ElectronWebviewElement = HTMLWebViewElement;
+
+  /** Anything live validation can run its scripts against — the main <webview>, or a stand-in
+   * for a popup window that routes executeJavaScript() through the main process. */
+  type ScriptTarget = Pick<HTMLWebViewElement, "executeJavaScript">;
 }

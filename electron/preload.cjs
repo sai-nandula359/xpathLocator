@@ -32,4 +32,17 @@ contextBridge.exposeInMainWorld("captureStudio", {
       ipcRenderer.invoke("device:enable-emulation", { webContentsId, parameters }),
     disableEmulation: (webContentsId) => ipcRenderer.invoke("device:disable-emulation", { webContentsId }),
   },
+  popups: {
+    onMessage: (callback) => {
+      const listener = (_event, message) => callback(message);
+      ipcRenderer.on("popup:message", listener);
+      return () => ipcRenderer.removeListener("popup:message", listener);
+    },
+    executeJavaScript: (popupId, code) => ipcRenderer.invoke("popups:execute-javascript", { popupId, code }),
+  },
+  frames: {
+    setCaptureMode: (enabled) => ipcRenderer.invoke("capture-mode:set", enabled),
+    executeJavaScript: (webContentsId, frameUrl, code) =>
+      ipcRenderer.invoke("frames:execute-javascript", { webContentsId, frameUrl, code }),
+  },
 });
